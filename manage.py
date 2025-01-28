@@ -6,16 +6,16 @@ from src.collection.building import collect_building
 from src.collection.gtfs import collect_gtfs
 from src.collection.landuse import collect_landuse
 from src.collection.network import collect_network
-from src.collection.network_pt import collect_network_pt
 from src.collection.osm_pt_lines import collect_osm_pt_lines
 from src.collection.overture import collect_overture
 from src.collection.poi import collect_poi
 from src.core.config import settings
 from src.db.db import Database
+from src.export.gtfs import export_gtfs
 from src.fusion.poi_osm_overture import fusion_poi_osm_overture
 from src.migration.gtfs import migrate_gtfs
 from src.preparation.building import prepare_building
-from src.preparation.gtfs import export_gtfs, prepare_gtfs
+from src.preparation.gtfs import prepare_gtfs
 from src.preparation.gtfs_stations import prepare_gtfs_stations
 from src.preparation.gtfs_stops import prepare_gtfs_stops
 from src.preparation.network import export_network, prepare_network
@@ -40,7 +40,6 @@ action_dict = {
         "poi": collect_poi,
         "landuse": collect_landuse,
         "network": collect_network,
-        "network_pt": collect_network_pt,
         "gtfs": collect_gtfs,
         "overture": collect_overture,
         "osm_pt_lines": collect_osm_pt_lines,
@@ -65,7 +64,7 @@ action_dict = {
     "export": {
         "poi": export_poi,
         "network": export_network,
-        "gtfs": export_gtfs
+        "gtfs": export_gtfs,
     },
     "migration": {
         "gtfs": migrate_gtfs

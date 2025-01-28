@@ -67,7 +67,7 @@ class GTFS:
             ),
             h3_ids AS
             (
-                SELECT DISTINCT to_short_h3_3(h3_lat_lng_to_cell(geom, 3)::bigint) AS h3_3,
+                SELECT DISTINCT basic.to_short_h3_3(h3_lat_lng_to_cell(geom, 3)::bigint) AS h3_3,
                 ST_SETSRID(h3_cell_to_boundary(h3_lat_lng_to_cell(geom, 3))::geometry, 4326) AS geom
                 FROM border_points
             )
@@ -520,11 +520,3 @@ def prepare_gtfs(region: str):
         raise e
     finally:
         db.close()
-
-
-def export_gtfs():
-    db = Database(settings.LOCAL_DATABASE_URI)
-    create_table_dump(db.db_config, "gtfs", "stops")
-    create_table_dump(db.db_config, "gtfs", "stop_times_optimized")
-    create_table_dump(db.db_config, "gtfs", "shape_dist_region")
-    db.close()

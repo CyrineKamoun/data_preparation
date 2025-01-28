@@ -40,6 +40,9 @@ RUN apt-get install -y postgresql-client-15
 RUN apt install -y nano
 RUN git config --global core.editor "nano"
 
+# Install zip
+RUN apt install -y zip
+
 # Install Java 11
 RUN echo 'deb http://deb.debian.org/debian bullseye main' > /etc/apt/sources.list
 RUN apt-get update && \

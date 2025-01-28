@@ -2,28 +2,15 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Kart: Command line",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/collection/kart/prepare_kart.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--repo_url", "https://github.com/goat-community/pois",
-                "--maintainer", "rds",
-                "--table_name", "poi"
-            ],
-            "cwd": "${workspaceFolder}"
-        },
-        {
-            "name": "CLI: Command line",
-            "type": "python",
+            "name": "Data Preparation CLI: manage.py",
+            "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/manage.py",
             "console": "integratedTerminal",
             "args": [
-                "--actions", "preparation",
-                "--region", "de",
-                "--datasets", "poi_osm_overture_fusion" 
+                "--actions", "",
+                "--datasets", "",
+                "--region", "",
             ],
             "cwd": "${workspaceFolder}"
         }
