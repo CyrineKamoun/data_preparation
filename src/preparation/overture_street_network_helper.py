@@ -4,6 +4,7 @@ from threading import Thread
 import psycopg2
 from tqdm import tqdm
 
+from src.db.db import Database
 from src.utils.utils import print_error
 
 
@@ -12,14 +13,18 @@ class ProcessSegments(Thread):
     def __init__(
             self,
             thread_id: int,
-            db_connection,
+            db_connection: Database,
+            local_source_table_connectors: str,
+            local_source_table_segments: str,
             get_next_h3_index,
-            cycling_surfaces
+            cycling_surfaces: dict,
         ):
         super().__init__(group=None, target=self)
 
         self.thread_id = thread_id
         self.db_connection = db_connection
+        self.local_source_table_connectors = local_source_table_connectors
+        self.local_source_table_segments = local_source_table_segments
         self.db_cursor = db_connection.cursor()
         self.get_next_h3_index = get_next_h3_index
         self.cycling_surfaces = cycling_surfaces
@@ -34,9 +39,10 @@ class ProcessSegments(Thread):
             # Ensure segments are within valid H3_6 cells as well
             sql_get_segment_ids = f"""
                 SELECT s.id
-                FROM temporal.segments s, basic.h3_3_grid g1, basic.h3_6_grid g2
+                FROM {self.local_source_table_segments} s, basic.h3_3_grid g1, basic.h3_6_grid g2
                 WHERE
-                    ST_Intersects(ST_Centroid(s.geometry), g1.h3_geom)
+                    s.subtype = 'road'
+                    AND ST_Intersects(ST_Centroid(s.geometry), g1.h3_geom)
                     AND ST_Intersects(ST_Centroid(s.geometry), g2.h3_geom)
                     AND g1.h3_index = '{h3_index}';
             """
@@ -51,7 +57,7 @@ class ProcessSegments(Thread):
                 ):
                 id = segment_ids[index]
                 sql_classify_segment = f"""
-                    SELECT classify_segment(
+                    SELECT basic.classify_segment(
                         '{id[0]}',
                         '{self.cycling_surfaces}'::jsonb
                     );

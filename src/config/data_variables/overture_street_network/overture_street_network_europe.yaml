@@ -1,0 +1,14 @@
+preparation:
+  # Tables in local database where data was collected
+  local_source_table_connectors: temporal.connectors # For now, this must not change
+  local_source_table_segments: temporal.segments # For now, this must not change
+
+  # A SQL query which returns the region's bounding geometry (omit terminating semicolon)
+  region: "SELECT ST_Union(geom) AS geom FROM poi.geom_ref WHERE id = 'geofence_active_mobility'"
+
+  # Coefficients specifying the cost of cycling on various surfaces
+  cycling_surfaces:
+    paving_stones: '0.2'
+    unpaved: '0.2'
+    gravel: '0.3'
+    dirt: '0.4'

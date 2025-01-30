@@ -14,8 +14,8 @@ CREATE TYPE output_segment AS (
 );
 
 
-DROP FUNCTION IF EXISTS public.classify_segment;
-CREATE OR REPLACE FUNCTION public.classify_segment(
+DROP FUNCTION IF EXISTS basic.classify_segment;
+CREATE OR REPLACE FUNCTION basic.classify_segment(
 	segment_id TEXT,
 	cycling_surfaces JSONB
 )
@@ -34,32 +34,35 @@ DECLARE
 	target_conn_geom public.geometry(point, 4326);
 BEGIN
 	-- Select relevant input segment
-	SELECT id, subtype, connectors, geometry,
-		road::jsonb->>'class' AS class,
-		road::jsonb->'roadNames' AS roadNames,
-		road::jsonb->'surface' AS surface,
-		road::jsonb->'flags' AS flags,
-		road::jsonb->'restrictions' AS restrictions,
-		road::jsonb AS allData
+	SELECT
+		id,
+		subtype,
+		connectors::jsonb AS connectors,
+		geometry,
+		class,
+		names::jsonb->>'primary' AS name,
+		road_surface::jsonb AS road_surface,
+		road_flags AS flags,
+		speed_limits::jsonb AS speed_limits
 	INTO input_segment
 	FROM temporal.segments
 	WHERE id = segment_id;
 
 	-- Check if segment needs to be split into sub-segments
-	IF array_length(input_segment.connectors, 1) > 2 THEN
+	IF jsonb_array_length(input_segment.connectors) > 2 THEN
 		-- Split segment into sub-segments
-		FOR i IN 2..array_length(input_segment.connectors, 1) LOOP
+		FOR i IN 1..(jsonb_array_length(input_segment.connectors) - 1) LOOP
 			-- Initialize sub-segment primary properties
 			new_sub_segment.id = input_segment.id || '_sub_' || i-1;
-			SELECT geometry INTO source_conn_geom FROM temporal.connectors WHERE id = input_segment.connectors[i-1];
-			SELECT geometry INTO target_conn_geom FROM temporal.connectors WHERE id = input_segment.connectors[i];
+			SELECT geometry INTO source_conn_geom FROM temporal.connectors WHERE id = (input_segment.connectors[i-1]->>'connector_id');
+			SELECT geometry INTO target_conn_geom FROM temporal.connectors WHERE id = (input_segment.connectors[i]->>'connector_id');
 			new_sub_segment.geom = ST_LineSubstring(
 				input_segment.geometry,
 				ST_LineLocatePoint(input_segment.geometry, source_conn_geom),
 				ST_LineLocatePoint(input_segment.geometry, target_conn_geom)
 			);
-			new_sub_segment.source = input_segment.connectors[i-1];
-			new_sub_segment.target = input_segment.connectors[i];
+			new_sub_segment.source = (input_segment.connectors[i-1]->>'connector_id');
+			new_sub_segment.target = (input_segment.connectors[i]->>'connector_id');
 
 			-- TODO Handle linear split surface for sub-segment
 			-- TODO Handle linear split speed limits for sub-segment
@@ -71,8 +74,8 @@ BEGIN
 		-- Initialize segment primary properties
 		new_sub_segment.id = input_segment.id;
 		new_sub_segment.geom = input_segment.geometry;
-		new_sub_segment.source = input_segment.connectors[1];
-		new_sub_segment.target = input_segment.connectors[2];
+		new_sub_segment.source = (input_segment.connectors[0]->>'connector_id');
+		new_sub_segment.target = (input_segment.connectors[1]->>'connector_id');
 
 		-- TODO Handle linear split surface for segment
 		-- TODO Handle linear split speed limits for segment
@@ -80,27 +83,29 @@ BEGIN
 
 		sub_segments = array_append(sub_segments, new_sub_segment);
 	END IF;
-	
+
 	-- Clip sub-segments to fit into h3_3 and h3_6 cells
-	SELECT clip_segments(sub_segments, 6) INTO output_segments;
-	SELECT clip_segments(output_segments, 3) INTO output_segments;
+	SELECT basic.clip_segments(sub_segments, 6) INTO output_segments;
+	SELECT basic.clip_segments(output_segments, 3) INTO output_segments;
 
 	-- Loop through final output segments
 	FOREACH output_segment IN ARRAY output_segments LOOP
 		-- Set remaining properties for every output segment, these are derived from primary properties
 		output_segment.length_m = ST_Length(output_segment.geom::geography);
 		output_segment.length_3857 = ST_Length(ST_Transform(output_segment.geom, 3857));
-		output_segment.coordinates_3857 = (ST_AsGeoJson(ST_Transform(output_segment.geom, 3857))::jsonb)['coordinates'];
+		output_segment.coordinates_3857 = ((ST_AsGeoJson(ST_Transform(output_segment.geom, 3857)))::jsonb)['coordinates'];
 		output_segment.osm_id = NULL;
 		output_segment.class_ = input_segment.class;
-		output_segment.h3_3 = to_short_h3_3(h3_lat_lng_to_cell(ST_Centroid(output_segment.geom)::point, 3)::bigint);
-		output_segment.h3_6 = to_short_h3_6(h3_lat_lng_to_cell(ST_Centroid(output_segment.geom)::point, 6)::bigint);
+		output_segment.h3_3 = basic.to_short_h3_3(h3_lat_lng_to_cell(ST_Centroid(output_segment.geom)::point, 3)::bigint);
+		output_segment.h3_6 = basic.to_short_h3_6(h3_lat_lng_to_cell(ST_Centroid(output_segment.geom)::point, 6)::bigint);
 
-		-- Temporarily set the following properties here, but evetually handle linear split values above
-		IF jsonb_typeof(input_segment.surface) != 'array' THEN
-			output_segment.impedance_surface = (cycling_surfaces ->> (input_segment.allData ->> 'surface'))::float;
+		-- Temporarily set the following properties here, but eventually handle linear split values above
+		IF jsonb_array_length(input_segment.road_surface) > 0 THEN
+			output_segment.impedance_surface = (cycling_surfaces ->> (input_segment.road_surface[0]->>'value'))::float;
 		END IF;
-		output_segment.maxspeed_forward = ((input_segment.restrictions -> 'speedLimits') -> 'maxSpeed')[0];
+		IF jsonb_array_length(input_segment.speed_limits) > 0 THEN
+			output_segment.maxspeed_forward = ((input_segment.speed_limits[0]->'max_speed')->>'value');
+		END IF;
 		output_segment.tags = input_segment.flags;
 
 		-- Check if digital elevation model (DEM) table exists and compute impedance values

@@ -1,6 +1,5 @@
 import json
 import os
-import subprocess
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from queue import Queue
@@ -10,88 +9,25 @@ import psycopg2
 from src.config.config import Config
 from src.core.config import settings
 from src.db.db import Database
-from src.preparation.network_overture_parallelism import (
+from src.preparation.overture_street_network_helper import (
     ComputeImpedance,
     ProcessSegments,
 )
 from src.utils.utils import (
-    delete_dir,
-    download_link,
-    make_dir,
     print_error,
     print_info,
 )
 
 
-class OvertureNetworkPreparation:
+class OvertureStreetNetworkPreparation:
 
     def __init__(self, db: Database, db_rd: Database, region: str):
         self.db = db
         self.db_rd = db_rd
         self.region = region
-        self.config = Config("network_overture", region)
+        self.config = Config("overture_street_network", region)
 
         self.NUM_THREADS = os.cpu_count() - 2
-
-
-    def initialize_dem_table(self):
-        """Initialize digital elevation model (DEM) raster table."""
-
-        sql_create_dem_table = """
-            DROP TABLE IF EXISTS public.dem;
-            CREATE TABLE public.dem (
-                rid serial4 NOT NULL,
-                rast public.raster NULL,
-                filename text NULL,
-                CONSTRAINT dem_pkey PRIMARY KEY (rid),
-                CONSTRAINT enforce_num_bands_rast CHECK ((ST_NumBands(rast) = 1)),
-                CONSTRAINT enforce_srid_rast CHECK ((ST_SRID(rast) = 4326))
-            );
-            CREATE INDEX dem_st_convexhull_idx ON public.dem USING gist (ST_ConvexHull(rast));
-        """
-        self.db.perform(sql_create_dem_table)
-
-
-    def import_dem_tiles(self):
-        """Import digital elevation model (DEM) used for calculating slopes."""
-
-        print_info("Importing DEM tiles.")
-
-        # Create directory for storing DEM related files
-        dem_dir = os.path.join(settings.INPUT_DATA_DIR, "network_overture", "dem")
-        delete_dir(dem_dir)
-        make_dir(dem_dir)
-
-        # Get list of source URLs to fetch DEM tiles
-        dem_source_list_file_path = os.path.join(
-            settings.INPUT_DATA_DIR,
-            "network_overture",
-            self.config.preparation["dem_source_list"]
-        )
-        dem_source_list = []
-        with open(dem_source_list_file_path, "r") as file:
-            for line in file:
-                dem_source_list.append(line.strip())
-
-        # Download & import relevant DEM tiles
-        for index in range(len(dem_source_list)):
-            download_link(
-                link=dem_source_list[index],
-                directory=dem_dir
-            )
-            try:
-                subprocess.run(
-                    f"raster2pgsql -s 4326 -M -a {os.path.join(dem_dir, os.path.basename(dem_source_list[index]))} -F -t auto public.dem | " \
-                    f"PGPASSWORD='{settings.POSTGRES_PASSWORD}' psql -h {settings.POSTGRES_HOST} -U {settings.POSTGRES_USER} -d {settings.POSTGRES_DB}",
-                    stdout = subprocess.DEVNULL,
-                    shell=True,
-                    check=True,
-                )
-            except subprocess.CalledProcessError as e:
-                print_error(e)
-                raise e
-
-            print_info(f"Imported DEM tile: {index + 1} of {len(dem_source_list)}.")
 
 
     def initialize_connectors_table(self):
@@ -155,23 +91,15 @@ class OvertureNetworkPreparation:
 
         sql_get_region_geometry = f"""
             SELECT ST_AsText(geom) AS geom
-            FROM ({self.config.collection["region"]}) sub
+            FROM ({self.config.preparation["region"]}) sub
         """
         region_geom = self.db_rd.select(sql_get_region_geometry)[0][0]
-
-        # TODO Remove this
-        with open("src/db/functions/fill_polygon_h3.sql", "r") as f:
-            self.db.perform(f.read())
-        with open("src/db/functions/to_short_h3_3.sql", "r") as f:
-            self.db.perform(f.read())
-        with open("src/db/functions/to_short_h3_6.sql", "r") as f:
-            self.db.perform(f.read())
 
         sql_create_region_h3_3_grid = f"""
             DROP TABLE IF EXISTS basic.h3_3_grid;
             CREATE TABLE basic.h3_3_grid AS
                 SELECT * FROM
-                public.fill_polygon_h3(ST_GeomFromText('{region_geom}', 4326), 3);
+                basic.fill_polygon_h3(ST_GeomFromText('{region_geom}', 4326), 3);
             ALTER TABLE basic.h3_3_grid ADD CONSTRAINT h3_3_grid_pkey PRIMARY KEY (h3_index);
             CREATE INDEX ON basic.h3_3_grid USING GIST (h3_boundary);
             CREATE INDEX ON basic.h3_3_grid USING GIST (h3_geom);
@@ -182,7 +110,7 @@ class OvertureNetworkPreparation:
             DROP TABLE IF EXISTS basic.h3_6_grid;
             CREATE TABLE basic.h3_6_grid AS
                 SELECT * FROM
-                public.fill_polygon_h3(ST_GeomFromText('{region_geom}', 4326), 6);
+                basic.fill_polygon_h3(ST_GeomFromText('{region_geom}', 4326), 6);
             ALTER TABLE basic.h3_6_grid ADD CONSTRAINT h3_6_grid_pkey PRIMARY KEY (h3_index);
             CREATE INDEX ON basic.h3_6_grid USING GIST (h3_boundary);
             CREATE INDEX ON basic.h3_6_grid USING GIST (h3_geom);
@@ -192,11 +120,11 @@ class OvertureNetworkPreparation:
         sql_compute_h3_short_index = """
             ALTER TABLE basic.h3_3_grid ADD COLUMN h3_short integer;
             UPDATE basic.h3_3_grid
-            SET h3_short = to_short_h3_3(h3_index::bigint);
+            SET h3_short = basic.to_short_h3_3(h3_index::bigint);
 
             ALTER TABLE basic.h3_6_grid ADD COLUMN h3_short integer;
             UPDATE basic.h3_6_grid
-            SET h3_short = to_short_h3_6(h3_index::bigint);
+            SET h3_short = basic.to_short_h3_6(h3_index::bigint);
         """
         self.db.perform(sql_compute_h3_short_index)
 
@@ -205,12 +133,6 @@ class OvertureNetworkPreparation:
 
     def initiate_segment_processing(self):
         """Utilize multithreading to process segments in parallel."""
-
-        # TODO Remove this
-        with open("src/db/functions/classify_segment.sql", "r") as f:
-            self.db.perform(f.read())
-        with open("src/db/functions/clip_segments.sql", "r") as f:
-            self.db.perform(f.read())
 
         # Load user-configured impedance coefficients for various surface types
         cycling_surfaces = json.dumps(self.config.preparation["cycling_surfaces"])
@@ -237,6 +159,8 @@ class OvertureNetworkPreparation:
                         ProcessSegments(
                             thread_id=thread_id,
                             db_connection=db_connections[thread_id],
+                            local_source_table_connectors=self.config.preparation["local_source_table_connectors"],
+                            local_source_table_segments=self.config.preparation["local_source_table_segments"],
                             get_next_h3_index=lambda: h3_3_queue.get() if not h3_3_queue.empty() else None,
                             cycling_surfaces=cycling_surfaces,
                         ).run
@@ -311,9 +235,6 @@ class OvertureNetworkPreparation:
     def run(self):
         """Run Overture network preparation."""
 
-        self.initialize_dem_table()
-        self.import_dem_tiles()
-
         self.initialize_connectors_table()
         self.initialize_segments_table()
 
@@ -324,13 +245,13 @@ class OvertureNetworkPreparation:
         self.clean_up()
 
 
-def prepare_overture_network(region: str):
+def prepare_overture_street_network(region: str):
     print_info(f"Prepare Overture network data for region: {region}.")
     db = Database(settings.LOCAL_DATABASE_URI)
     db_rd = Database(settings.RAW_DATABASE_URI)
 
     try:
-        OvertureNetworkPreparation(
+        OvertureStreetNetworkPreparation(
             db=db,
             db_rd=db_rd,
             region=region
