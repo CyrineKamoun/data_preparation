@@ -9,6 +9,7 @@ CREATE TYPE output_segment AS (
 	maxspeed_backward integer, "source" text,
 	source_index integer, target text,
 	target_index integer, tags jsonb,
+	access_restrictions jsonb,
     geom public.geometry(linestring, 4326),
     h3_3 integer, h3_6 integer
 );
@@ -30,8 +31,8 @@ DECLARE
 	sub_segments output_segment[] = '{}';
 	output_segments output_segment[] = '{}';
 	
-	source_conn_geom public.geometry(point, 4326);
-	target_conn_geom public.geometry(point, 4326);
+	source_conn_location float;
+	target_conn_location float;
 BEGIN
 	-- Select relevant input segment
 	SELECT
@@ -43,10 +44,16 @@ BEGIN
 		names::jsonb->>'primary' AS name,
 		road_surface::jsonb AS road_surface,
 		road_flags AS flags,
+		access_restrictions::jsonb AS access_restrictions,
 		speed_limits::jsonb AS speed_limits
 	INTO input_segment
 	FROM temporal.segments
 	WHERE id = segment_id;
+
+	-- Skip this segment if the subtype is not road
+	IF input_segment.subtype != 'road' THEN
+		RETURN;
+	END IF;
 
 	-- Check if segment needs to be split into sub-segments
 	IF jsonb_array_length(input_segment.connectors) > 2 THEN
@@ -54,12 +61,16 @@ BEGIN
 		FOR i IN 1..(jsonb_array_length(input_segment.connectors) - 1) LOOP
 			-- Initialize sub-segment primary properties
 			new_sub_segment.id = input_segment.id || '_sub_' || i-1;
-			SELECT geometry INTO source_conn_geom FROM temporal.connectors WHERE id = (input_segment.connectors[i-1]->>'connector_id');
-			SELECT geometry INTO target_conn_geom FROM temporal.connectors WHERE id = (input_segment.connectors[i]->>'connector_id');
+			SELECT ST_LineLocatePoint(input_segment.geometry, geometry) INTO source_conn_location FROM temporal.connectors WHERE id = (input_segment.connectors[i-1]->>'connector_id');
+			SELECT ST_LineLocatePoint(input_segment.geometry, geometry) INTO target_conn_location FROM temporal.connectors WHERE id = (input_segment.connectors[i]->>'connector_id');
+			
+			-- Handle rare cases with invalid connector locations
+			CONTINUE WHEN source_conn_location > target_conn_location;
+			
 			new_sub_segment.geom = ST_LineSubstring(
 				input_segment.geometry,
-				ST_LineLocatePoint(input_segment.geometry, source_conn_geom),
-				ST_LineLocatePoint(input_segment.geometry, target_conn_geom)
+				source_conn_location,
+				target_conn_location
 			);
 			new_sub_segment.source = (input_segment.connectors[i-1]->>'connector_id');
 			new_sub_segment.target = (input_segment.connectors[i]->>'connector_id');
@@ -107,6 +118,7 @@ BEGIN
 			output_segment.maxspeed_forward = ((input_segment.speed_limits[0]->'max_speed')->>'value');
 		END IF;
 		output_segment.tags = input_segment.flags;
+		output_segment.access_restrictions = input_segment.access_restrictions;
 
 		-- Check if digital elevation model (DEM) table exists and compute impedance values
 		-- IF EXISTS (SELECT 1 FROM pg_tables WHERE schemaname = 'public' AND tablename = 'dem') THEN
@@ -123,7 +135,7 @@ BEGIN
                 class_, impedance_slope, impedance_slope_reverse,
 				impedance_surface, coordinates_3857, maxspeed_forward,
 				maxspeed_backward, source, target,
-				tags, geom, h3_3, h3_6
+				tags, access_restrictions, geom, h3_3, h3_6
         )
         VALUES (
 			output_segment.length_m, output_segment.length_3857,
@@ -131,8 +143,11 @@ BEGIN
 			output_segment.class_, output_segment.impedance_slope, output_segment.impedance_slope_reverse,
 			output_segment.impedance_surface, output_segment.coordinates_3857, output_segment.maxspeed_forward,
 			output_segment.maxspeed_backward, output_segment.source_index, output_segment.target_index,
-			output_segment.tags, output_segment.geom, output_segment.h3_3, output_segment.h3_6
+			output_segment.tags, output_segment.access_restrictions, output_segment.geom, output_segment.h3_3,
+			output_segment.h3_6
         );
     END LOOP;
 END
-$$ LANGUAGE plpgsql;
+$$
+LANGUAGE plpgsql
+PARALLEL SAFE;

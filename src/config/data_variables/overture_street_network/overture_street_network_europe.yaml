@@ -1,7 +1,6 @@
 preparation:
-  # Tables in local database where data was collected
-  local_source_table_connectors: temporal.connectors # For now, this must not change
-  local_source_table_segments: temporal.segments # For now, this must not change
+  # Currently, the preparation script only reads segments from temporal.segments and writes the output to basic.segment
+  # Currently, the preparation script only reads connectors from temporal.connectors and writes the output to basic.connector
 
   # A SQL query which returns the region's bounding geometry (omit terminating semicolon)
   region: "SELECT ST_Union(geom) AS geom FROM poi.geom_ref WHERE id = 'geofence_active_mobility'"

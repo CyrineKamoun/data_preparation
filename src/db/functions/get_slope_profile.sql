@@ -7,6 +7,10 @@ DECLARE
 	translation_m_degree NUMERIC;
 	dump_points geometry[];
 BEGIN
+	IF length_meters = 0 THEN
+		length_meters = 1;
+	END IF;
+
 	translation_m_degree = length_degree/length_meters;
 	dem_resolution = dem_resolution * translation_m_degree;
 

@@ -72,6 +72,7 @@ class OvertureStreetNetworkPreparation:
                 "source" integer NOT NULL,
                 target integer NOT NULL,
                 tags jsonb NULL,
+                access_restrictions jsonb NULL,
                 geom public.geometry(linestring, 4326) NOT NULL,
                 h3_3 integer NOT NULL,
                 h3_6 integer NOT NULL,
@@ -159,9 +160,7 @@ class OvertureStreetNetworkPreparation:
                         ProcessSegments(
                             thread_id=thread_id,
                             db_connection=db_connections[thread_id],
-                            local_source_table_connectors=self.config.preparation["local_source_table_connectors"],
-                            local_source_table_segments=self.config.preparation["local_source_table_segments"],
-                            get_next_h3_index=lambda: h3_3_queue.get() if not h3_3_queue.empty() else None,
+                            get_next_h3_index=lambda: self.get_next_h3_3_index(h3_3_queue),
                             cycling_surfaces=cycling_surfaces,
                         ).run
                     )
@@ -176,7 +175,7 @@ class OvertureStreetNetworkPreparation:
                         ComputeImpedance(
                             thread_id=thread_id,
                             db_connection=db_connections[thread_id],
-                            get_next_h3_index=lambda: h3_6_queue.get() if not h3_6_queue.empty() else None,
+                            get_next_h3_index=lambda: self.get_next_h3_6_index(h3_6_queue),
                         ).run
                     )
                     for thread_id in range(self.NUM_THREADS)
@@ -196,15 +195,25 @@ class OvertureStreetNetworkPreparation:
         """Get queue of H3 indexes to be processed by threads."""
 
         sql_get_h3_indexes = """
-            SELECT h3_index
+            SELECT h3_short
             FROM basic.h3_3_grid
-            ORDER BY h3_index;
+            ORDER BY h3_short;
         """
         h3_indexes = self.db.select(sql_get_h3_indexes)
         h3_index_queue = Queue()
         for h3_index in h3_indexes:
             h3_index_queue.put(h3_index[0])
         return h3_index_queue
+
+
+    def get_next_h3_3_index(self, h3_3_queue: Queue):
+        """Get next H3_3 cell index to be processed by a thread."""
+
+        if h3_3_queue.empty():
+            return None
+        next_h3_3_index = h3_3_queue.get()
+        print_info(f"Processing H3_3 cell {next_h3_3_index}, remaining: {h3_3_queue.qsize()}")
+        return next_h3_3_index
 
 
     def get_h3_6_index_queue(self):
@@ -213,13 +222,23 @@ class OvertureStreetNetworkPreparation:
         sql_get_h3_indexes = """
             SELECT h3_short
             FROM basic.h3_6_grid
-            ORDER BY h3_index;
+            ORDER BY h3_short;
         """
         h3_indexes = self.db.select(sql_get_h3_indexes)
         h3_index_queue = Queue()
         for h3_index in h3_indexes:
             h3_index_queue.put(h3_index[0])
         return h3_index_queue
+
+
+    def get_next_h3_6_index(self, h3_6_queue: Queue):
+        """Get next H3_6 cell index to be processed by a thread."""
+
+        if h3_6_queue.empty():
+            return None
+        next_h3_6_index = h3_6_queue.get()
+        print_info(f"Processing H3_6 cell {next_h3_6_index}, remaining: {h3_6_queue.qsize()}")
+        return next_h3_6_index
 
 
     def clean_up(self):
