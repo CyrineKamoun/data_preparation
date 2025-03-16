@@ -22,6 +22,7 @@ from src.preparation.network import export_network, prepare_network
 from src.preparation.network_pt import prepare_network_pt
 from src.preparation.osm_pt_lines import prepare_osm_pt_lines
 from src.preparation.overture_division_area import prepare_overture_division_area
+from src.preparation.overture_place import prepare_overture_place
 from src.preparation.overture_street_network import prepare_overture_street_network
 from src.preparation.poi import export_poi, prepare_poi
 from src.preparation.poi_overture import prepare_poi_overture
@@ -57,6 +58,7 @@ action_dict = {
         "gtfs_stops": prepare_gtfs_stops,
         "gtfs_stations": prepare_gtfs_stations,
         "osm_pt_lines": prepare_osm_pt_lines,
+        "overture_place": prepare_overture_place,
     },
     "fusion":{
         "poi_osm_overture": fusion_poi_osm_overture,

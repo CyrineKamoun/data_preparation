@@ -1,0 +1,37 @@
+preparation:
+  # Table in local database where data was written during collection
+  local_source_table: temporal.place_europe
+
+  # Table in local database where data will be written
+  local_result_table: temporal.place_europe_retail
+
+  # A SQL query which returns the region's bounding geometry (omit terminating semicolon)
+  # Leave this empty if global data is to be fetched
+  region: "SELECT ST_Union(geom) AS geom FROM poi.geom_ref WHERE id = 'geofence_active_mobility'"
+
+  # List of categories to produce and their associated Overture taxonomy hierarchy
+  # Reference: https://github.com/OvertureMaps/schema/blob/main/docs/schema/concepts/by-theme/places/overture_categories.csv
+  categories:
+    auto_parts_and_supply_store: [retail, auto_parts_and_supply_store]
+    beverage_store: [retail, beverage_store]
+    boat_parts_and_supply_store: [retail, boat_parts_and_supply_store]
+    carpet_store: [retail, carpet_store]
+    distillery: [retail, distillery]
+    drugstore: [retail, drugstore]
+    flooring_store: [retail, flooring_store]
+    food: [retail, food]
+    health_market: [retail, health_market]
+    hearing_aid_provider: [retail, hearing_aid_provider]
+    herb_and_spice_shop: [retail, herb_and_spice_shop]
+    honey_farm_shop: [retail, honey_farm_shop]
+    meat_shop: [retail, meat_shop]
+    olive_oil: [retail, olive_oil]
+    party_supply: [retail, party_supply]
+    pharmacy: [retail, pharmacy]
+    popcorn_shop: [retail, popcorn_shop]
+    seafood_market: [retail, seafood_market]
+    shopping: [retail, shopping]
+    tire_shop: [retail, tire_shop]
+    water_store: [retail, water_store]
+
+    # public_service_and_government: [public_service_and_government]

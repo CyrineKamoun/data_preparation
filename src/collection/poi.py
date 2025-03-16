@@ -24,7 +24,7 @@ class OSMPOICollection(OSMCollection):
                     osm_filter += tag + " "
 
         if osm_filter:
-            '--keep="' + osm_filter + '"'
+            osm_filter = '--keep="' + osm_filter + '"'
 
         # Remove not needed osm feature categories
         if self.data_config.collection["nodes"] == False:
