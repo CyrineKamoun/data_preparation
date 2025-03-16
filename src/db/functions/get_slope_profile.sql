@@ -1,5 +1,5 @@
-DROP FUNCTION IF EXISTS public.get_slope_profile;
-CREATE OR REPLACE FUNCTION public.get_slope_profile(way_geom geometry, length_meters float, length_degree float, interval_ float default 10, dem_resolution float default 30)
+DROP FUNCTION IF EXISTS basic.get_slope_profile;
+CREATE OR REPLACE FUNCTION basic.get_slope_profile(way_geom geometry, length_meters float, length_degree float, interval_ float default 10, dem_resolution float default 30)
 RETURNS TABLE(elevs float[], linkLength float, lengthInterval float)
 LANGUAGE plpgsql
 AS $function$
@@ -42,7 +42,7 @@ BEGIN
 	FROM 
 	(
 		SELECT SUM(idw.val/(idw.distance/translation_m_degree))/SUM(1/(idw.distance/translation_m_degree))::real AS elev
-		FROM points p, get_idw_values(geom, dem_resolution) idw
+		FROM points p, basic.get_idw_values(geom, dem_resolution) idw
 		WHERE p.geom IS NOT NULL 
 		GROUP BY cnt 
 		ORDER BY cnt 
@@ -54,6 +54,6 @@ $function$;
 /*
 EXPLAIN ANALYZE 
 SELECT s.*
-FROM ways, LATERAL get_slope_profile(the_geom, length_m, length) s
+FROM ways, LATERAL basic.get_slope_profile(the_geom, length_m, length) s
 LIMIT 1
 */

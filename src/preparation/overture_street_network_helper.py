@@ -15,6 +15,7 @@ class ProcessSegments(Thread):
             db_connection: Database,
             get_next_h3_index,
             cycling_surfaces: dict,
+            default_speed_limits: dict,
         ):
         super().__init__(group=None, target=self)
 
@@ -23,6 +24,7 @@ class ProcessSegments(Thread):
         self.db_cursor = db_connection.cursor()
         self.get_next_h3_index = get_next_h3_index
         self.cycling_surfaces = cycling_surfaces
+        self.default_speed_limits = default_speed_limits
 
 
     def run(self):
@@ -48,7 +50,8 @@ class ProcessSegments(Thread):
                 sql_classify_segment = f"""
                     SELECT basic.classify_segment(
                         '{id[0]}',
-                        '{self.cycling_surfaces}'::jsonb
+                        '{self.cycling_surfaces}'::jsonb,
+                        '{self.default_speed_limits}'::jsonb
                     );
                 """
                 try:
@@ -109,16 +112,14 @@ class ComputeImpedance(Thread):
                 UPDATE basic.segment AS sp
                 SET impedance_slope = COALESCE(c.imp, 0), impedance_slope_reverse = COALESCE(c.rs_imp, 0)
                 FROM segment,
-                LATERAL get_slope_profile(segment.geom, segment.length_m, ST_LENGTH(segment.geom)) s,
-                LATERAL compute_impedances(s.elevs, s.linklength, s.lengthinterval) c
+                LATERAL basic.get_slope_profile(segment.geom, segment.length_m, ST_LENGTH(segment.geom)) s,
+                LATERAL basic.compute_impedances(s.elevs, s.linklength, s.lengthinterval) c
                 WHERE sp.h3_6 = segment.h3_6
                 AND sp.id = segment.id;
             """
             try:
-                # start_time = time.time()
                 self.db_cursor.execute(sql_update_impedance)
                 self.db_connection.commit()
-                # print_info(f"Thread {self.thread_id} updated impedance for H3 index {h3_short}. Time: {round(time.time() - start_time)} seconds.")
             except Exception as e:
                 print_error(f"Thread {self.thread_id} failed to update impedances for H3 index {h3_short}, error: {e}.")
                 break

@@ -27,7 +27,7 @@ class OvertureStreetNetworkPreparation:
         self.region = region
         self.config = Config("overture_street_network", region)
 
-        self.NUM_THREADS = os.cpu_count() - 2
+        self.NUM_THREADS = 16
 
 
     def initialize_connectors_table(self):
@@ -36,15 +36,14 @@ class OvertureStreetNetworkPreparation:
         sql_create_connectors_table = """
             DROP TABLE IF EXISTS basic.connector CASCADE;
             CREATE TABLE basic.connector (
-                index serial NOT NULL UNIQUE,
-                id text NOT NULL UNIQUE,
-                osm_id int8 NULL,
+                id serial NOT NULL UNIQUE,
+                overture_id text NULL UNIQUE,
                 geom public.geometry(point, 4326) NOT NULL,
                 h3_3 integer NOT NULL,
                 h3_6 integer NOT NULL,
-                CONSTRAINT connector_pkey PRIMARY KEY (index, h3_3)
+                CONSTRAINT connector_pkey PRIMARY KEY (id, h3_3)
             );
-            CREATE INDEX idx_connector_id on basic.connector (id);
+            CREATE INDEX idx_connector_overture_id on basic.connector (overture_id);
             CREATE INDEX idx_connector_geom ON basic.connector USING gist (geom);
         """
         self.db.perform(sql_create_connectors_table)
@@ -57,12 +56,11 @@ class OvertureStreetNetworkPreparation:
             DROP TABLE IF EXISTS basic.segment;
             CREATE TABLE basic.segment (
                 id serial NOT NULL,
+                overture_id text NOT NULL,
                 length_m float8 NOT NULL,
                 length_3857 float8 NOT NULL,
-                osm_id int8 NULL,
-                bicycle text NULL,
-                foot text NULL,
                 class_ text NOT NULL,
+                subclass text NULL,
                 impedance_slope float8 NULL,
                 impedance_slope_reverse float8 NULL,
                 impedance_surface float8 NULL,
@@ -71,14 +69,12 @@ class OvertureStreetNetworkPreparation:
                 maxspeed_backward integer NULL,
                 "source" integer NOT NULL,
                 target integer NOT NULL,
-                tags jsonb NULL,
-                access_restrictions jsonb NULL,
                 geom public.geometry(linestring, 4326) NOT NULL,
                 h3_3 integer NOT NULL,
                 h3_6 integer NOT NULL,
                 CONSTRAINT segment_pkey PRIMARY KEY (id, h3_3),
-                CONSTRAINT segment_source_fkey FOREIGN KEY ("source") REFERENCES basic.connector(index),
-                CONSTRAINT segment_target_fkey FOREIGN KEY (target) REFERENCES basic.connector(index)
+                CONSTRAINT segment_source_fkey FOREIGN KEY ("source") REFERENCES basic.connector(id),
+                CONSTRAINT segment_target_fkey FOREIGN KEY (target) REFERENCES basic.connector(id)
             );
             CREATE INDEX idx_segment_geom ON basic.segment USING gist (geom);
             CREATE INDEX ix_basic_segment_source ON basic.segment USING btree (source);
@@ -132,20 +128,36 @@ class OvertureStreetNetworkPreparation:
         print_info(f"Computed H3 grid for region: {self.region}.")
 
 
+    def open_database_connections(self, num_connections: int):
+        """Open multiple database connections for parallel processing."""
+
+        connections = []
+        for _ in range(num_connections):
+            connection_string = f"dbname={settings.POSTGRES_DB} user={settings.POSTGRES_USER} \
+                                 password={settings.POSTGRES_PASSWORD} host={settings.POSTGRES_HOST} \
+                                 port={settings.POSTGRES_PORT}"
+            conn = psycopg2.connect(connection_string)
+            connections.append(conn)
+        return connections
+
+
+    def close_database_connections(self, connections: list):
+        """Close multiple database connections."""
+
+        [conn.close() for conn in connections]
+
+
     def initiate_segment_processing(self):
         """Utilize multithreading to process segments in parallel."""
 
         # Load user-configured impedance coefficients for various surface types
         cycling_surfaces = json.dumps(self.config.preparation["cycling_surfaces"])
 
+        # Load user-configured default speed limits for various road classes
+        default_speed_limits = json.dumps(self.config.preparation["default_speed_limits"])
+
         # Create separate DB connections for each thread
-        db_connections = []
-        for _ in range(self.NUM_THREADS):
-            connection_string = f"dbname={settings.POSTGRES_DB} user={settings.POSTGRES_USER} \
-                                 password={settings.POSTGRES_PASSWORD} host={settings.POSTGRES_HOST} \
-                                 port={settings.POSTGRES_PORT}"
-            conn = psycopg2.connect(connection_string)
-            db_connections.append(conn)
+        db_connections = self.open_database_connections(self.NUM_THREADS)
 
         print_info(f"Starting {self.NUM_THREADS} threads for processing segments.")
         start_time = time.time()
@@ -162,12 +174,37 @@ class OvertureStreetNetworkPreparation:
                             db_connection=db_connections[thread_id],
                             get_next_h3_index=lambda: self.get_next_h3_3_index(h3_3_queue),
                             cycling_surfaces=cycling_surfaces,
+                            default_speed_limits=default_speed_limits,
                         ).run
                     )
                     for thread_id in range(self.NUM_THREADS)
                 ]
                 [future.result() for future in as_completed(futures)]
+        except Exception as e:
+            print_error(e)
+            raise e
+        finally:
+            # Clean up DB connections
+            self.close_database_connections(db_connections)
 
+        # Create index on h3_6 column to support further processing
+        self.db.perform("CREATE INDEX ON basic.segment (h3_6);")
+
+        print_info(f"Finished processing segments in {round((time.time() - start_time) / 60)} minutes.")
+
+
+    def compute_slope_impedance(self):
+        """Utilize multithreading to process segments in parallel."""
+
+        # Create separate DB connections for each thread
+        db_connections = self.open_database_connections(self.NUM_THREADS)
+
+        print_info(f"Starting {self.NUM_THREADS} threads for computing slope impedance.")
+        start_time = time.time()
+
+        # Start threads
+        try:
+            with ThreadPoolExecutor(max_workers=self.NUM_THREADS) as executor:
                 # Compute segment impedance values
                 h3_6_queue = self.get_h3_6_index_queue()
                 futures = [
@@ -186,9 +223,18 @@ class OvertureStreetNetworkPreparation:
             raise e
         finally:
             # Clean up DB connections
-            [conn.close() for conn in db_connections]
+            self.close_database_connections(db_connections)
 
-        print_info(f"Finished processing segments in {round((time.time() - start_time) / 60)} minutes.")
+        # Fix remaining segments where impedance values could not be computed
+        print_info("Fixing remaining segments where impedance values could not be computed.")
+        sql_fix_remaining_segments = """
+            UPDATE basic.segment
+            SET impedance_slope = 0, impedance_slope_reverse = 0
+            WHERE impedance_slope IS NULL;
+        """
+        self.db.perform(sql_fix_remaining_segments)
+
+        print_info(f"Finished computing slope impedance in {round((time.time() - start_time) / 60)} minutes.")
 
 
     def get_h3_3_index_queue(self):
@@ -237,18 +283,9 @@ class OvertureStreetNetworkPreparation:
         if h3_6_queue.empty():
             return None
         next_h3_6_index = h3_6_queue.get()
-        print_info(f"Processing H3_6 cell {next_h3_6_index}, remaining: {h3_6_queue.qsize()}")
+        if len(h3_6_queue.queue) % 1000 == 0:
+            print_info(f"Processing H3_6 cell {next_h3_6_index}, remaining: {h3_6_queue.qsize()}")
         return next_h3_6_index
-
-
-    def clean_up(self):
-        """Remove unused temp columns from the connector table."""
-
-        sql_clean_up = """
-            ALTER TABLE basic.connector DROP COLUMN id;
-            ALTER TABLE basic.connector RENAME COLUMN index TO id;
-        """
-        self.db.perform(sql_clean_up)
 
 
     def run(self):
@@ -260,8 +297,7 @@ class OvertureStreetNetworkPreparation:
         self.compute_region_h3_grid()
 
         self.initiate_segment_processing()
-
-        self.clean_up()
+        self.compute_slope_impedance()
 
 
 def prepare_overture_street_network(region: str):
