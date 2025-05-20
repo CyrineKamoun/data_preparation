@@ -1,7 +1,8 @@
+import os
+
 import geopandas as gpd
 import numpy as np
 import polars as pl
-import os
 
 from src.config.config import Config
 from src.core.config import settings
@@ -85,7 +86,7 @@ class PoiPreparation:
             f"""SELECT {column_names}, 'n' AS osm_type, ST_ASTEXT(way) AS geom FROM public.osm_poi_{self.region}_point""",
             f"""SELECT {column_names}, 'w' AS osm_type, ST_ASTEXT(ST_CENTROID(way)) AS geom FROM public.osm_poi_{self.region}_polygon""",
         ]
-        df = pl.read_database(sql_query, self.db_uri)
+        df = pl.read_database_uri(sql_query, self.db_uri)
         return df
 
     @timing
@@ -708,7 +709,10 @@ class PoiPreparation:
         df = df.with_columns(
             pl.when(
                 (pl.col("amenity") == "vending_machine")
-                & (pl.col("tags").apply(lambda tags: any(tag in tags for tag in ['food', 'bread', 'milk', 'eggs', 'meat', 'potato', 'honey', 'cheese'])))
+                & (pl.col("tags").map_elements(
+                    lambda tags: any(tag in tags for tag in ['food', 'bread', 'milk', 'eggs', 'meat', 'potato', 'honey', 'cheese']),
+                    return_dtype=pl.Boolean
+                ))
             )
             .then(pl.lit("food_vending_machine"))
             .otherwise(pl.col("category"))

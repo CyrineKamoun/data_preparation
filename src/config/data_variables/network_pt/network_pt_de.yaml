@@ -1,0 +1,28 @@
+preparation:
+  # A SQL query which returns the region's bounding geometry (omit terminating semicolon)
+  region: "SELECT ST_Union(geom) AS geom FROM public.germany_states"
+
+  # File in the src/data/input/network_pt directory where OSM data is stored
+  local_osm_file: "germany-latest.osm.pbf"
+
+  # Schema in local database where GTFS data was collected
+  local_gtfs_schema: "gtfs_de_20250203"
+
+  # Table in local database where sub-regions will be written
+  local_sub_region_table: "temporal.sub_region_de"
+
+  # Weekday dates that will be used to optimize the GTFS data
+  # Leave empty if no optimization is desired
+  weekday_tuesday: "2025-02-18"
+  weekday_saturday: "2025-02-22"
+  weekday_sunday: "2025-02-23"
+
+  # Buffer distance in meters to add to the sub-region's geometry
+  sub_region_buffer_dist: 80000
+
+  # Number of sub-regions to divide the region into
+  sub_region_count: 4
+
+export:
+  # Configure whether the script should delete old regions and bundles from R5 automatically
+  delete_old_regions: false

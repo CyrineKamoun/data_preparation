@@ -686,20 +686,52 @@ def polars_df_to_postgis(
 
     # Close connection
     db.close()
-    
-    
+
+
 def osm_crop_to_polygon(orig_file_path: str, dest_file_path: str, poly_file_path: str):
     """
     Crops OSM data as per polygon file
 
     Args:
             orig_file_path (str): Path to the input OSM data file
-            dest_file_path (str): Path to the output OSM data file (incl. filename with extension ".pbf") where OSM data is to be written
+            dest_file_path (str): Path to the output OSM data file (incl. filename with extension) where OSM data is to be written
             poly_file_path (str): Path to a polygon filter file (as per the format described here: https://wiki.openstreetmap.org/wiki/Osmosis/Polygon_Filter_File_Format)
     """
-    
+
     subprocess.run(
         f"osmconvert {orig_file_path} -B={poly_file_path} --complete-ways --drop-relations --drop-author --drop-version -o={dest_file_path}",
+        shell=True,
+        check=True,
+    )
+
+
+def osm_filter_to_highways(orig_file_path: str, dest_file_path: str):
+    """
+    Crops OSM data as per polygon file
+
+    Args:
+            orig_file_path (str): Path to the input OSM data file
+            dest_file_path (str): Path to the output OSM data file (incl. filename with extension) where OSM data is to be written
+    """
+
+    subprocess.run(
+        f'osmfilter {orig_file_path} --keep="highway=" -o={dest_file_path}',
+        shell=True,
+        check=True,
+    )
+
+
+def osm_convert(orig_file_path: str, dest_file_path: str):
+    """
+    Crops OSM data as per polygon file
+
+    Args:
+            orig_file_path (str): Path to the input OSM data file
+            dest_file_path (str): Path to the output OSM data file (incl. filename with extension) where OSM data is to be written
+    """
+
+    subprocess.run(
+        f'osmconvert {orig_file_path} -o={dest_file_path}',
         shell=True,
         check=True,
     )

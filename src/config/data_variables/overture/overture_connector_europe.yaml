@@ -1,6 +1,6 @@
 collection:
   # Overture release version
-  version: 2024-09-18.0
+  version: 2025-01-22.0
 
   # Overture data theme
   theme: transportation
@@ -9,19 +9,8 @@ collection:
   type: connector
 
   # Table in local database where data will be written
-  local_result_table: temporal.connector_europe
+  local_result_table: temporal.connectors
 
   # A SQL query which returns the region's bounding geometry (omit terminating semicolon)
   # Leave this empty if global data is to be fetched
   region: "SELECT ST_Union(geom) AS geom FROM poi.geom_ref WHERE id = 'geofence_active_mobility'"
-
-preparation:
-  # Name of text file containing a list of URLs to download DEM files
-  dem_source_list: dem_source_list_eu.txt
-
-  # Coefficients specifying the cost of cycling on various surfaces
-  cycling_surfaces:
-    pavingStones: '0.2'
-    unpaved: '0.2'
-    gravel: '0.3'
-    dirt: '0.4'

@@ -1,12 +1,11 @@
 import os
+import subprocess
 
 import yaml
 
 from src.config.osm_dict import OSM_germany, OSM_tags
 from src.core.config import settings
 from src.utils.utils import download_link, print_info
-
-import subprocess
 
 
 class Config:
@@ -28,6 +27,7 @@ class Config:
             self.name = name
             self.collection = self.config.get("collection")
             self.preparation = self.config.get("preparation")
+            self.export = self.config.get("export")
             self.subscription = self.config.get("subscription")
             self.analysis = self.config.get("analysis")
             self.pbf_data = self.config.get("region_pbf")

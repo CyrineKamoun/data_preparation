@@ -71,7 +71,7 @@ Preparation
 - poi_overture
 - network
 - network_pt
-- network_overture
+- overture_street_network
 - gtfs
 - gtfs_stops
 - gtfs_stations

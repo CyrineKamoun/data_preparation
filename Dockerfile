@@ -26,9 +26,9 @@ RUN apt update
 RUN apt install -y s3fs
 
 # Install kart 
-RUN apt-get install -y libtinfo5
-RUN wget "https://goat-db-schemas.s3.eu-central-1.amazonaws.com/kart.deb"
-RUN dpkg -i kart.deb
+# RUN apt-get install -y libtinfo5
+# RUN wget "https://goat-db-schemas.s3.eu-central-1.amazonaws.com/kart.deb"
+# RUN dpkg -i kart.deb
 
 # install posgresql-client
 RUN sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
@@ -39,6 +39,9 @@ RUN apt-get install -y postgresql-client-15
 # install nano and make default git editor
 RUN apt install -y nano
 RUN git config --global core.editor "nano"
+
+# Install zip
+RUN apt install -y zip
 
 # Install Java 11
 RUN echo 'deb http://deb.debian.org/debian bullseye main' > /etc/apt/sources.list

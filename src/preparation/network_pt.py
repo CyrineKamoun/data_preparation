@@ -1,208 +1,334 @@
 import os
-import time
-
-import requests
 
 from src.config.config import Config
 from src.core.config import settings
 from src.db.db import Database
-
-R5_FRONTEND_URL_REGIONS = f"{settings.R5_FRONTEND_HOST}:{settings.R5_FRONTEND_PORT}/api/db/regions"
-R5_BACKEND_URL_BUNDLE = f"{settings.R5_BACKEND_HOST}:{settings.R5_BACKEND_PORT}/api/bundle"
+from src.utils.utils import (
+    delete_file,
+    make_dir,
+    osm_convert,
+    osm_crop_to_polygon,
+    osm_filter_to_highways,
+    osm_generate_polygon,
+    print_error,
+    print_info,
+    timing,
+)
 
 
 class NetworkPTPreparation:
-    """Class to upload processed GTFS & OSM data to our R5 routing engine"""
-    
-    def __init__(self, db_rd, config, region):
-        self.db_rd = db_rd
-        self.region = region
-        self.sub_regions = self.db_rd.select(config.get("sub_regions_query"))
-        
-        self.sub_region_gtfs_input_dir = os.path.join(settings.INPUT_DATA_DIR, "network_pt", region)
-        self.sub_region_osm_output_dir = os.path.join(settings.OUTPUT_DATA_DIR, "network_pt", region)
-        
-        self.headers = {}
-        if settings.R5_AUTHORIZATION:
-            self.headers["Authorization"] = settings.R5_AUTHORIZATION
-    
-    
-    def upload_processed_data(self):
-        """Creates network bundles for every sub-region to upload OSM & GTFS data"""
-        
-        for id in self.sub_regions:
-            id = int(id[0])
-            print(f"Creating R5 region for region: {self.region}, sub-region: {id}")
-            region_name = f"region-{self.region}_{id}"
-            success = self.delete_region_r5(name=region_name) # Delete old region
-            if not success:
-                print(f"Unable to delete old R5 region: {region_name}")
-                break
-            region_id = self.create_region_r5( # Create new region with latest bounds for this sub-region
-                name=region_name,
-                description="",
-                bounds=self.get_sub_region_bounds(id=id)
-            )
-            if region_id is None:
-                print(f"Unable to create new R5 region: {region_name}")
-                break
-            
-            print(f"Creating R5 network bundle for region: {self.region}, sub-region: {id}")
-            bundle_name = f"bundle-{self.region}_{id}"
-            success = self.delete_bundle_r5(name=bundle_name) # Delete old bundle
-            if not success:
-                print(f"Unable to delete old R5 bundle: {bundle_name}")
-                break
-            bundle_id = self.create_bundle_r5( # Create new bundle with latest OSM & GTFS data for this sub-region
-                name=bundle_name,
-                region_id=region_id,
-                osm_path=os.path.join(self.sub_region_osm_output_dir, f"{id}.pbf"),
-                gtfs_path=os.path.join(self.sub_region_gtfs_input_dir, f"{id}.zip")
-            )
-            if bundle_id is None:
-                print(f"Unable to create new R5 bundle: {bundle_name}")
-                break
-            
-            # Wait until previous bundle is processed
-            bundle_status = self.get_bundle_status_r5(id=bundle_id)
-            while bundle_status == "PROCESSING_OSM":
-                time.sleep(10)
-                bundle_status = self.get_bundle_status_r5(id=bundle_id)
-            if bundle_status != "DONE":
-                print(f"R5 engine failed to process bundle: {bundle_name}")
-                break
-    
-    
-    def get_sub_region_bounds(self, id):
-        bounds = self.db_rd.select(
-            f"""SELECT ST_XMin(buff_geom), ST_YMin(buff_geom), ST_XMax(buff_geom), ST_YMax(buff_geom)
-                FROM 
-                (
-                    SELECT st_envelope(buffer_geom) AS buff_geom  
-                    FROM public.gtfs_regions 
-                    WHERE id = {id}
-                ) bg;"""
-        )
-        return (bounds[0][0], bounds[0][1], bounds[0][2], bounds[0][3])
-    
-    
-    def get_region_id_r5(self, name: str):
-        """Get the ID of a previously created region in R5"""
-        
-        region_id = None
-        response = requests.get(url=R5_FRONTEND_URL_REGIONS, headers=self.headers)
-        if response.status_code == 200:
-            for region in response.json():
-                if region["name"] == name:
-                    region_id = region["_id"]
-                    break
-        return region_id
-    
-    
-    def delete_region_r5(self, name: str):
-        """Deletes a region from R5"""
-        
-        region_id = self.get_region_id_r5(name=name)
-        if region_id is None:
-            return True
-        response = requests.delete(
-            url=f"{R5_FRONTEND_URL_REGIONS}/{region_id}",
-            headers=self.headers
-        )
-        return (response.status_code == 200)
-    
-    
-    def create_region_r5(self, name: str, description: str, bounds: tuple[float]):
-        """Creates a region in R5"""
-        
-        request_body = {
-            "name": name,
-            "description": description,
-            "bounds": {
-                "north": bounds[3], # ymax
-                "south": bounds[1], # ymin
-                "east": bounds[2], # xmax
-                "west": bounds[0], # xmin
-            }
-        }
-        response = requests.post(
-            url=R5_FRONTEND_URL_REGIONS,
-            json=request_body,
-            headers=self.headers
-        )
-        region_id = None
-        if response.status_code == 201:
-            region_id = response.json()["_id"]
-        return region_id
-    
-    
-    def get_bundle_id_r5(self, name: str):
-        """Get the ID of a previously created bundle in R5"""
-        
-        bundle_id = None
-        response = requests.get(url=R5_BACKEND_URL_BUNDLE, headers=self.headers)
-        if response.status_code == 200:
-            for bundle in response.json():
-                if bundle["name"] == name:
-                    bundle_id = bundle["_id"]
-                    break
-        return bundle_id
-    
-    
-    def get_bundle_status_r5(self, id: str):
-        """Get the status of a bundle in R5"""
-        
-        response = requests.get(url=f"{R5_BACKEND_URL_BUNDLE}/{id}", headers=self.headers)
-        return response.json()["status"] if response.status_code == 200 else None
-    
-    
-    def delete_bundle_r5(self, name: str):
-        """Deletes a bundle from R5"""
-        
-        bundle_id = self.get_bundle_id_r5(name=name)
-        if bundle_id is None:
-            return True
-        response = requests.delete(
-            url=f"{R5_BACKEND_URL_BUNDLE}/{bundle_id}",
-            headers=self.headers
-        )
-        return (response.status_code == 200)
-    
-    
-    def create_bundle_r5(self, name: str, region_id: str, osm_path: str, gtfs_path: str):
-        """Creates a network bundle (GTFS + OSM data) in R5"""
-        
-        request_body = {
-            "bundleName": name,
-            "regionId": region_id
-        }
-        data_files = {
-            "osm": (os.path.basename(osm_path), open(osm_path, "rb")),
-            "feedGroup": (os.path.basename(gtfs_path), open(gtfs_path, "rb"))
-        }
-        response = requests.post(
-            url=R5_BACKEND_URL_BUNDLE,
-            data=request_body,
-            files=data_files,
-            headers=self.headers
-        )
-        return response.json()["_id"] if response.status_code == 200 else None
-    
+    """Class to process and clip OSM and GTFS data into sub-regions."""
 
+    def __init__(self, db: Database, db_rd: Database, region: str):
+        self.region = region
+        self.db = db
+        self.db_rd = db_rd
+        self.config = Config("network_pt", region)
+
+        self.input_dir = os.path.join(settings.INPUT_DATA_DIR, "network_pt", region)
+        self.output_dir = os.path.join(settings.OUTPUT_DATA_DIR, "network_pt", region)
+        self.local_sub_region_table = self.config.preparation["local_sub_region_table"]
+
+        self.sub_regions = None
+
+    def create_sub_regions(self):
+        """Create sub-regions based on the region geometry and grid size specified."""
+
+        sub_region_buffer_dist = self.config.preparation["sub_region_buffer_dist"]
+        sub_region_grid_size = self.config.preparation["sub_region_count"]
+        sub_region_grid_width = int(sub_region_grid_size / 2)
+        sub_region_grid_height = int(sub_region_grid_size / 2)
+        if sub_region_grid_size % 2 != 0:
+            sub_region_grid_height += 1
+
+        print_info(f"Generating sub-regions for region: {self.region}")
+
+        # Fetch region geometry
+        region_geom = self.db_rd.select(f"""
+            SELECT ST_AsText(geom) as geom
+            FROM ({self.config.preparation["region"]}) AS region;
+        """)[0][0]
+
+        # Divide region geometry into sub-regions
+        sql_create_table = f"""
+            DROP TABLE IF EXISTS {self.local_sub_region_table};
+            CREATE TABLE {self.local_sub_region_table} AS
+            WITH region AS (
+                SELECT ST_GeomFromText('{region_geom}', 4326) AS geom
+            )
+            SELECT
+                ROW_NUMBER() OVER () AS id,
+                divided.geom,
+                ST_Buffer(divided.geom::geography, {sub_region_buffer_dist})::geometry AS buffer_geom
+            FROM region,
+            LATERAL basic.divide_polygon(geom, {sub_region_grid_width}, {sub_region_grid_height}) AS divided;
+        """
+        self.db.perform(sql_create_table)
+
+        # Fetch list of sub-region IDs
+        sub_regions = self.db.select(f"""
+            SELECT id
+            FROM {self.local_sub_region_table};
+        """)
+        self.sub_regions = [id[0] for id in sub_regions]
+
+
+    def clip_osm_data(self):
+        """Clip OSM data to the buffer geometry of each sub-region."""
+
+        # Initialise output directory
+        make_dir(self.output_dir)
+
+        # Generate sub-region polygon filters
+        print_info(f"Generating OSM filters for region: {self.region}")
+        for id in self.sub_regions:
+            osm_generate_polygon(
+                db_rd=self.db,
+                geom_query=f"SELECT buffer_geom as geom FROM {self.local_sub_region_table} WHERE id = {id}",
+                dest_file_path=os.path.join(self.output_dir, f"{id}.poly")
+            )
+
+        # Crop region OSM data as per sub-region polygon filters
+        for id in self.sub_regions:
+            print_info(f"Clipping OSM data for sub-region: {id}")
+            osm_crop_to_polygon(
+                orig_file_path=os.path.join(self.input_dir, self.config.preparation["local_osm_file"]),
+                dest_file_path=os.path.join(self.output_dir, f"{id}.o5m"),
+                poly_file_path=os.path.join(self.output_dir, f"{id}.poly")
+            )
+            delete_file(file_path=os.path.join(self.output_dir, f"{id}.poly"))
+
+    def process_osm_data(self):
+        """Further process and optimize OSM data."""
+
+        # Filter OSM files to only include highways
+        print_info(f"Filtering clipped OSM datasets: {self.region}")
+        for id in self.sub_regions:
+            osm_filter_to_highways(
+                orig_file_path=os.path.join(self.output_dir, f"{id}.o5m"),
+                dest_file_path=os.path.join(self.output_dir, f"{id}_filtered.o5m"),
+            )
+            delete_file(file_path=os.path.join(self.output_dir, f"{id}.o5m"))
+
+        # Convert OSM files to PBF format
+        print_info(f"Processing filtered OSM datasets: {self.region}")
+        for id in self.sub_regions:
+            osm_convert(
+                orig_file_path=os.path.join(self.output_dir, f"{id}_filtered.o5m"),
+                dest_file_path=os.path.join(self.output_dir, f"{id}.pbf"),
+            )
+            delete_file(file_path=os.path.join(self.output_dir, f"{id}_filtered.o5m"))
+
+    def clip_gtfs_data(self):
+        """Clip GTFS data to the buffer geometry of each sub-region."""
+
+        # Generate sub-region GTFS datasets
+        for id in self.sub_regions:
+            print_info(f"Clipping GTFS data for sub-region: {id}")
+
+            region_schema = self.config.preparation["local_gtfs_schema"]
+            sub_region_schema = f"network_pt_{self.region}_{id}"
+
+            # Create new schema for sub-region data
+            self.db.perform(f"""
+                DROP SCHEMA IF EXISTS {sub_region_schema} CASCADE;
+                CREATE SCHEMA {sub_region_schema};
+            """)
+
+            # Create trips table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.trips AS
+                SELECT t.*
+                FROM {region_schema}.trips t, (
+                    SELECT DISTINCT(trip_id) AS trip_id
+                    FROM (
+                        SELECT s.stop_id
+                        FROM {region_schema}.stops s,
+                        {self.local_sub_region_table} r
+                        WHERE r.id = {id}
+                        AND ST_Intersects(s.geom, r.buffer_geom)
+                    ) s,
+                    {region_schema}.stop_times st
+                    WHERE st.stop_id = s.stop_id
+                ) sub
+                WHERE t.trip_id = sub.trip_id;
+                ALTER TABLE {sub_region_schema}.trips ADD PRIMARY KEY (trip_id);
+                CREATE INDEX ON {sub_region_schema}.trips (route_id);
+            """)
+
+            # Create routes table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.routes AS (
+                    SELECT r.*
+                    FROM {region_schema}.routes r, (
+                        SELECT DISTINCT(route_id) AS route_id
+                        FROM {sub_region_schema}.trips t
+                    ) sub
+                    WHERE r.route_id = sub.route_id
+                );
+                ALTER TABLE {sub_region_schema}.routes ADD PRIMARY KEY (route_id);
+            """)
+
+            # Create agency table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.agency AS (
+                    SELECT a.*
+                    FROM {region_schema}.agency a, (
+                        SELECT DISTINCT(agency_id) AS agency_id
+                        FROM {sub_region_schema}.routes r
+                    ) sub
+                    WHERE a.agency_id = sub.agency_id
+                );
+                ALTER TABLE {sub_region_schema}.agency ADD PRIMARY KEY (agency_id);
+            """)
+
+            # Create calendar table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.calendar AS (
+                    SELECT c.*
+                    FROM {region_schema}.calendar c, (
+                        SELECT DISTINCT(service_id) AS service_id
+                        FROM {sub_region_schema}.trips t
+                    ) sub
+                    WHERE c.service_id = sub.service_id
+                );
+                ALTER TABLE {sub_region_schema}.calendar ADD PRIMARY KEY (service_id);
+                CREATE INDEX ON {sub_region_schema}.calendar (start_date, end_date);
+            """)
+
+            # Create calendar_dates table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.calendar_dates AS (
+                    SELECT cd.*
+                    FROM {region_schema}.calendar_dates cd, (
+                        SELECT DISTINCT(service_id) AS service_id
+                        FROM {sub_region_schema}.trips t
+                    ) sub
+                    WHERE cd.service_id = sub.service_id
+                );
+                ALTER TABLE {sub_region_schema}.calendar_dates ADD PRIMARY KEY (service_id, date);
+            """)
+
+            # Create shapes table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.shapes AS (
+                    SELECT s.*
+                    FROM {region_schema}.shapes s, (
+                        SELECT DISTINCT(shape_id) AS shape_id
+                        FROM {sub_region_schema}.trips t
+                    ) sub
+                    WHERE s.shape_id = sub.shape_id
+                );
+                ALTER TABLE {sub_region_schema}.shapes ADD PRIMARY KEY (shape_id, shape_pt_sequence, h3_3);
+            """)
+
+    def optimize_gtfs_data(self):
+        """Optimize the size of GTFS data by removing unnecessary trips."""
+
+        # Check if optimization is desired
+        if not self.config.preparation["weekday_tuesday"] or \
+            not self.config.preparation["weekday_saturday"] or \
+            not self.config.preparation["weekday_sunday"]:
+            return
+
+        for id in self.sub_regions:
+            print_info(f"Optimizing GTFS data for sub-region: {id}")
+
+            region_schema = self.config.preparation["local_gtfs_schema"]
+            sub_region_schema = f"network_pt_{self.region}_{id}"
+
+            # Remove trips that are not scheduled to operate on the specified days
+            sql_delete_unused_trips = f"""
+                WITH unused_trips AS (
+                    WITH inactive_services AS (
+                        SELECT service_id
+                        FROM {sub_region_schema}.calendar
+                        WHERE tuesday = '0'
+                        AND saturday = '0'
+                        AND sunday = '0'
+                    ),
+                    active_dates AS (
+                        SELECT service_id
+                        FROM {sub_region_schema}.calendar_dates
+                        WHERE date IN (
+                            '{self.config.preparation["weekday_tuesday"]}'::DATE,
+                            '{self.config.preparation["weekday_saturday"]}'::DATE,
+                            '{self.config.preparation["weekday_sunday"]}'::DATE
+                        )
+                        AND exception_type = 1
+                    )
+                    SELECT trip_id
+                    FROM (
+                        SELECT *
+                        FROM inactive_services
+                        WHERE service_id NOT IN (SELECT * FROM active_dates)
+                    ) inactive,
+                    {sub_region_schema}.trips t
+                    WHERE t.service_id = inactive.service_id
+                )
+                DELETE FROM {sub_region_schema}.trips
+                WHERE trip_id IN (SELECT trip_id FROM unused_trips);
+            """
+            self.db.perform(sql_delete_unused_trips)
+
+            # Create stop_times table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.stop_times AS (
+                    SELECT st.*
+                    FROM {region_schema}.stop_times st,
+                    {sub_region_schema}.trips t
+                    WHERE st.trip_id = t.trip_id
+                );
+                ALTER TABLE {sub_region_schema}.stop_times ADD PRIMARY KEY (trip_id, stop_sequence, h3_3);
+                CREATE INDEX ON {sub_region_schema}.stop_times (stop_id, arrival_time, departure_time);
+            """)
+
+            # Create stops table
+            self.db.perform(f"""
+                CREATE TABLE {sub_region_schema}.stops AS (
+                    SELECT s.*
+                    FROM {region_schema}.stops s,
+                    (SELECT DISTINCT stop_id, h3_3 FROM {sub_region_schema}.stop_times) st
+                    WHERE s.h3_3 = st.h3_3
+                    AND s.stop_id = st.stop_id
+                );
+                ALTER TABLE {sub_region_schema}.stops ADD PRIMARY KEY (stop_id, h3_3);
+            """)
+
+            # Import missing parent stations and their child stops
+            self.db.perform(f"""
+                INSERT INTO {sub_region_schema}.stops
+                SELECT s.*
+                FROM {region_schema}.stops s, (
+                    SELECT DISTINCT(parent_station) AS parent_station
+                    FROM {sub_region_schema}.stops
+                ) sub
+                WHERE s.stop_id = sub.parent_station
+                OR s.parent_station = sub.parent_station
+                ON CONFLICT DO NOTHING;
+            """)
+
+@timing
 def prepare_network_pt(region: str):
-    """Main function"""
-    
+    print_info(f"Preparing PT network for region: {region}")
+    db = Database(settings.LOCAL_DATABASE_URI)
     db_rd = Database(settings.RAW_DATABASE_URI)
+
     try:
-        config = Config(name="network_pt", region=region)
         network_pt_preparation = NetworkPTPreparation(
+            db=db,
             db_rd=db_rd,
-            config=config.config,
             region=region
         )
-        network_pt_preparation.upload_processed_data()
+        network_pt_preparation.create_sub_regions()
+        network_pt_preparation.clip_osm_data()
+        network_pt_preparation.process_osm_data()
+        network_pt_preparation.clip_gtfs_data()
+        network_pt_preparation.optimize_gtfs_data()
+        print_info(f"Finished preparing PT network for region: {region}")
     except Exception as e:
-        print(e)
+        print_error(f"Failed to prepare PT network for region: {region}")
         raise e
     finally:
-        db_rd.conn.close()
+        db.close()
+        db_rd.close()

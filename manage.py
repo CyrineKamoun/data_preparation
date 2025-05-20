@@ -6,23 +6,24 @@ from src.collection.building import collect_building
 from src.collection.gtfs import collect_gtfs
 from src.collection.landuse import collect_landuse
 from src.collection.network import collect_network
-from src.collection.network_pt import collect_network_pt
 from src.collection.osm_pt_lines import collect_osm_pt_lines
 from src.collection.overture import collect_overture
 from src.collection.poi import collect_poi
 from src.core.config import settings
 from src.db.db import Database
+from src.export.gtfs import export_gtfs
 from src.fusion.poi_osm_overture import fusion_poi_osm_overture
 from src.migration.gtfs import migrate_gtfs
 from src.preparation.building import prepare_building
-from src.preparation.gtfs import export_gtfs, prepare_gtfs
+from src.preparation.gtfs import prepare_gtfs
 from src.preparation.gtfs_stations import prepare_gtfs_stations
 from src.preparation.gtfs_stops import prepare_gtfs_stops
 from src.preparation.network import export_network, prepare_network
-from src.preparation.network_overture import prepare_overture_network
 from src.preparation.network_pt import prepare_network_pt
 from src.preparation.osm_pt_lines import prepare_osm_pt_lines
 from src.preparation.overture_division_area import prepare_overture_division_area
+from src.preparation.overture_place import prepare_overture_place
+from src.preparation.overture_street_network import prepare_overture_street_network
 from src.preparation.poi import export_poi, prepare_poi
 from src.preparation.poi_overture import prepare_poi_overture
 from src.preparation.population import prepare_population
@@ -40,7 +41,6 @@ action_dict = {
         "poi": collect_poi,
         "landuse": collect_landuse,
         "network": collect_network,
-        "network_pt": collect_network_pt,
         "gtfs": collect_gtfs,
         "overture": collect_overture,
         "osm_pt_lines": collect_osm_pt_lines,
@@ -53,11 +53,12 @@ action_dict = {
         "building": prepare_building,
         "population": prepare_population,
         "gtfs": prepare_gtfs,
-        "network_overture": prepare_overture_network,
+        "overture_street_network": prepare_overture_street_network,
         "overture": prepare_overture_division_area,
         "gtfs_stops": prepare_gtfs_stops,
         "gtfs_stations": prepare_gtfs_stations,
         "osm_pt_lines": prepare_osm_pt_lines,
+        "overture_place": prepare_overture_place,
     },
     "fusion":{
         "poi_osm_overture": fusion_poi_osm_overture,
@@ -65,7 +66,7 @@ action_dict = {
     "export": {
         "poi": export_poi,
         "network": export_network,
-        "gtfs": export_gtfs
+        "gtfs": export_gtfs,
     },
     "migration": {
         "gtfs": migrate_gtfs

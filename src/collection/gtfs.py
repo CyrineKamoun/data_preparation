@@ -180,7 +180,7 @@ class GTFSCollection:
                 sql_copy = f"""
                     INSERT INTO {self.schema}.{table} ({output_cols_formatted}, geom, h3_3)
                     SELECT {output_cols_formatted}, ST_SetSRID(ST_MakePoint(shape_pt_lon, shape_pt_lat), 4326) AS geom,
-                    public.to_short_h3_3(h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(shape_pt_lon, shape_pt_lat), 4326)::point, 3)::bigint) AS h3_3
+                    basic.to_short_h3_3(h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(shape_pt_lon, shape_pt_lat), 4326)::point, 3)::bigint) AS h3_3
                     FROM {self.schema}.{table}_temp;
                 """
             elif table == "stops":
@@ -196,7 +196,7 @@ class GTFSCollection:
                     );
 
                     UPDATE {self.schema}.{table}_temp
-                    SET h3_3 = to_short_h3_3(
+                    SET h3_3 = basic.to_short_h3_3(
                         h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(stop_lon, stop_lat), 4326)::point, 3)::bigint
                     )
                     WHERE h3_3 IS NULL;

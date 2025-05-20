@@ -1,0 +1,27 @@
+preparation:
+  # Currently, the preparation script only reads segments from temporal.segments and writes the output to basic.segment
+  # Currently, the preparation script only reads connectors from temporal.connectors and writes the output to basic.connector
+
+  # A SQL query which returns the region's bounding geometry (omit terminating semicolon)
+  region: "SELECT ST_Union(geom) AS geom FROM poi.geom_ref WHERE id = 'geofence_active_mobility'"
+
+  # Coefficients specifying the cost of cycling on various surfaces
+  cycling_surfaces:
+    unpaved: '0.2'
+    gravel: '0.3'
+    dirt: '0.4'
+    paving_stones: '0.2'
+
+  # Coefficients specifying default speed limits for various road classes
+  default_speed_limits:
+    motorway: 80
+    primary: 50
+    secondary: 50
+    tertiary: 50
+    residential: 30
+    living_street: 30
+    trunk: 60
+    unclassified: 50
+    service: 30
+    track: 30
+    unknown: 30

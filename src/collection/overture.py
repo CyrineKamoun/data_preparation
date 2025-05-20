@@ -1,4 +1,5 @@
 import pyspark.sql.types as pyspark_types
+from pyspark.sql import SparkSession
 from pyspark.sql.functions import expr, to_json
 from sedona.spark import SedonaContext
 
@@ -48,8 +49,8 @@ class OvertureCollection:
         if not self.data_config_collection.get("local_result_table"):
             raise ValueError("Local result table not specified.")
 
-    def initialize_sedona_context(self):
-        """Initialze Sedona context with required dependencies, AWS credentials provider and resource allocations."""
+    def initialize_spark_session(self) -> SparkSession:
+        """Initialze SparkSession with required dependencies, AWS credentials provider and resource allocations."""
 
         config = SedonaContext.builder() \
             .config('spark.jars.packages',
@@ -86,11 +87,11 @@ class OvertureCollection:
 
         return f"s3a://overturemaps-us-west-2/release/{version}/theme={theme}/type={type}"
 
-    def initialize_data_source(self, sedona: SedonaContext):
+    def initialize_data_source(self, spark: SparkSession):
         """Initialize Overture geoparquet file source and Spark data frames."""
 
         # Load Overture geoparquet data into Spark DataFrames
-        self.data_frame = sedona.read.format("geoparquet").load(
+        self.data_frame = spark.read.format("geoparquet").load(
             path=self.build_overture_s3_uri(
                 version=self.data_config_collection["version"],
                 theme=self.data_config_collection["theme"],
@@ -174,9 +175,9 @@ class OvertureCollection:
         self.validate_config()
 
         # Initialize Overture data source
-        sedona = self.initialize_sedona_context()
+        spark = self.initialize_spark_session()
         self.initialize_jdbc_properties()
-        self.initialize_data_source(sedona)
+        self.initialize_data_source(spark)
 
         # Process data frame and filter by region bounds
         bbox_coords = get_region_bbox_coords(
