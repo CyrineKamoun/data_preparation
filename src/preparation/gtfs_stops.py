@@ -74,6 +74,8 @@ class GTFSStopsPreparation:
         self.data_config = Config("gtfs_stops", region)
         self.data_config_preparation = self.data_config.preparation
 
+        self.gtfs_schema = self.data_config_preparation['local_gtfs_schema']
+
     def run(self):
         """Run the public transport stop preparation."""
 
@@ -104,7 +106,7 @@ class GTFSStopsPreparation:
                 INSERT INTO {result_table} (stop_id, category, name, modes, source, wheelchair, geom)
                 WITH clipped_gfts_stops AS (
                     SELECT stop_id, stop_name, geom, h3_3, wheelchair_boarding, parent_station
-                    FROM basic.stops
+                    FROM {self.gtfs_schema}.stops
                     WHERE location_type != '1'
                     AND ST_Intersects(geom, ST_SetSRID(ST_GeomFromText(ST_AsText('{geom[0]}')), 4326))
                 ),
@@ -114,7 +116,7 @@ class GTFSStopsPreparation:
                     CROSS JOIN LATERAL
                     (
                         SELECT DISTINCT o.route_type
-                        FROM basic.stop_times_optimized o
+                        FROM {self.gtfs_schema}.stop_times_optimized o
                         WHERE o.stop_id = c.stop_id
                         AND o.h3_3 = c.h3_3
                         AND o.route_type IN {tuple(int(key) for key in flat_mode_mapping.keys())}
@@ -125,7 +127,7 @@ class GTFSStopsPreparation:
                     FROM categorized_gtfs_stops child
                     LEFT JOIN (
                         SELECT stop_id AS parent_stop_id,wheelchair_boarding AS parent_wheelchair_boarding
-                        FROM basic.stops
+                        FROM {self.gtfs_schema}.stops
                         WHERE location_type = '1'
                     ) parent
                     ON child.parent_station = parent.parent_stop_id
@@ -155,8 +157,8 @@ class GTFSStopsPreparation:
 
 def prepare_gtfs_stops(region: str):
     try:
-        db_rd = Database(settings.RAW_DATABASE_URI)
-        public_transport_stop_preparation = GTFSStopsPreparation(db=db_rd, region=region)
+        db = Database(settings.LOCAL_DATABASE_URI)
+        public_transport_stop_preparation = GTFSStopsPreparation(db=db, region=region)
         public_transport_stop_preparation.run()
     finally:
-        db_rd.conn.close()
+        db.conn.close()
