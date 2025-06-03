@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 
@@ -27,6 +28,7 @@ class Config:
             self.name = name
             self.collection = self.config.get("collection")
             self.preparation = self.config.get("preparation")
+            self.validation = self.config.get("validation")
             self.export = self.config.get("export")
             self.subscription = self.config.get("subscription")
             self.analysis = self.config.get("analysis")
@@ -103,5 +105,3 @@ class Config:
         download_link(
             settings.INPUT_DATA_DIR, self.config_base["db_schema"], "dump.tar"
         )
-
-

@@ -28,6 +28,7 @@ from src.preparation.poi import export_poi, prepare_poi
 from src.preparation.poi_overture import prepare_poi_overture
 from src.preparation.population import prepare_population
 from src.utils.utils import print_hashtags, print_info
+from src.validation.poi import validate_poi
 
 app = typer.Typer()
 
@@ -71,6 +72,9 @@ action_dict = {
     "migration": {
         "gtfs": migrate_gtfs
     },
+    "validation": {
+        "poi": validate_poi
+    }
 }
 
 

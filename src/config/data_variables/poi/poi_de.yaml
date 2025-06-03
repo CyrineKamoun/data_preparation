@@ -166,8 +166,36 @@ preparation:
   deli: 
     inherit: "supermarket"
 
+validation:
+  local_poi_table: "public.poi_osm_de"
+  raw_poi_table:
+    ["goat.poi_shopping", "goat.poi_health"]
+  metrics:
+    count:
+      geom_reference_query: "SELECT id, geografischername_gen AS name, ST_AsText(geom) AS geom FROM public.germany_counties"
+      thresholds:
+        default: 0.1
+        supermarket: 0.05
+        bakery: 0.06
+        pharmacy: 0.07
+        dentist: 0.03
+    density:
+      geom_reference_query: "SELECT id, geografischername_gen AS name, geom FROM public.germany_counties"
+      thresholds:
+        default: 100.0       # 100 POIs per 1000 sq km
+        supermarket: 50.0    # 50 supermarkets per 1000 sq km  
+        bakery: 80.0         # 80 bakeries per 1000 sq km
+        pharmacy: 60.0       # 60 pharmacies per 1000 sq km
+        dentist: 30.0        # 30 dentists per 1000 sq km
+        restaurant: 200.0    # 200 restaurants per 1000 sq km
+        hospital: 10.0       # 10 hospitals per 1000 sq km
+    category_distribution:
+      geom_reference_query: "SELECT id, geografischername_gen AS name, geom FROM public.germany_counties"
+      thresholds:
+        default: 5
+        urban_areas: 8
+        suburban: 6
+        rural: 3
+
 subscription:
   repo_url: "https://github.com/goat-community/pois"
-    
-
-
