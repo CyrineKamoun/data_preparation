@@ -1,6 +1,7 @@
 import os
 import re
 import json
+import subprocess
 import time
 import pandas as pd
 import geopandas as gpd
@@ -36,9 +37,9 @@ class PoiValidation:
         self.geom_reference_query = self.config.validation["metrics"][self.default_metric]["geom_reference_query"]
         self.polygon_geom_table = self.geom_reference_query.split("FROM", 1)[1].strip().split()[0]
 
-    def create_temp_geom_reference_table(self, db_raw: Database, db_local: Database, metric: str=None, temp_polygons_clone: str=None):
+    def create_temp_geom_reference_table(self, db_raw: Database, db_local: Database, temp_polygons_clone: str=None):
         """
-        Create a temporary geometry reference table in the local database by copying data from the raw database.
+        Copy polygons geometry reference table from raw to local using ogr2ogr.
 
         Args:
             db_raw (Database): Database connection to the raw database.
@@ -54,38 +55,55 @@ class PoiValidation:
         print_info(f"Creating clone of {self.polygon_geom_table} in local database")
         print_hashtags()
         
-        # Determine which metric to use. If not provided, use the "count" metric.
-        if metric is None:
-            metric = self.default_metric
-
         # Copy the polygon table name using the geometry reference query to the temp_polygons_clone variable 
         if temp_polygons_clone is None:
             temp_polygons_clone = self.geom_reference_query.split("FROM")[1].strip().split()[0]
-
-        # Run the geometry reference query and store all the results in the geom_data variable
-        geom_data = db_raw.select(self.geom_reference_query)
-
-        # If not run for the first time, the table gets dropped and recreated
-        drop_sql = f"DROP TABLE IF EXISTS {temp_polygons_clone};"
-        db_local.perform(drop_sql)
-
-        # Create a temporary polygon geometry reference table clone in local DB
-        create_sql = f"""
-        CREATE TABLE {temp_polygons_clone} (
-            id TEXT,
-            name TEXT,
-            geom geometry
-        );
-        """
-        db_local.perform(create_sql)
-
-        # Insert the data copied from the raw database into the local temporary polygon geometry reference table
-        insert_sql = f"INSERT INTO {temp_polygons_clone} (id, name, geom) VALUES (%s, %s, %s);"
-        for row in geom_data:
-            db_local.perform(insert_sql, row)
+    
+        # Extract the local and raw db credentials to parse to ogr2ogr command
+        local_host = settings.LOCAL_DATABASE_URI.host
+        local_db = settings.LOCAL_DATABASE_URI.path.replace("/", "")
+        local_user = settings.LOCAL_DATABASE_URI.user
+        local_password = settings.LOCAL_DATABASE_URI.password
+        local_port = settings.LOCAL_DATABASE_URI.port
+        
+        # Extract the raw db credentials to parse to ogr2ogr command
+        raw_host = settings.RAW_DATABASE_URI.host
+        raw_db = settings.RAW_DATABASE_URI.path.replace("/", "")
+        raw_user = settings.RAW_DATABASE_URI.user
+        raw_password = settings.RAW_DATABASE_URI.password
+        raw_port = settings.RAW_DATABASE_URI.port
+        
+        # Run the ogr2ogr command to copy the polygon geometry reference table from raw to local database
+        ogr2ogr_command = (
+            f"ogr2ogr -f 'PostgreSQL' "
+            f"PG:'host={local_host} dbname={local_db} user={local_user} password={local_password} port={local_port}' "
+            f"PG:'host={raw_host} dbname={raw_db} user={raw_user} password={raw_password} port={raw_port}' "
+            f"-nln {temp_polygons_clone} -sql \"{self.geom_reference_query}\""
+        )
+    
+        try:
+            subprocess.run(ogr2ogr_command, shell=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print_error(f"Polygons data table copy failed: {e}")
     
         # It returns the name of the temporary polygon geometry reference table    
         return temp_polygons_clone
+    
+    def drop_temp_geom_reference_table(self, db: Database, temp_polygons_clone: str):
+        """
+        Drop the temporary polygons geometry reference table from the database.
+
+        Args:
+            db (Database): Database connection to the database.
+            temp_polygons_clone (str): Name of the temporary polygons table to drop.
+        """
+        
+        print_info(f"Dropping temporary polygons geometry reference table {temp_polygons_clone}")
+        print_hashtags()
+        
+        # Execute the drop table query
+        drop_query = f"DROP TABLE IF EXISTS {temp_polygons_clone};"
+        db.perform(drop_query)
     
     def convert_geometry_query_columns_to_dict(self):
         """
@@ -143,11 +161,24 @@ class PoiValidation:
         print_hashtags()
 
         # Generate the spatial join query using the group by clause and poi_table for local or raw database
+        # spatial_join_query = f"""
+        #     SELECT {group_by_clause}, poi.category, COUNT(poi.category) AS count
+        #     FROM {temp_polygons_clone} AS poly JOIN {poi_table} AS poi
+        #     ON ST_Within(poi.geom, poly.geom)
+        #     WHERE poi.category IS NOT NULL
+        #     GROUP BY {group_by_clause}, poi.category
+        #     ORDER BY poi.category;
+        # """
+        
         spatial_join_query = f"""
-            SELECT {group_by_clause}, poi.category, COUNT(poi.category) AS count
-            FROM {temp_polygons_clone} AS poly JOIN {poi_table} AS poi
-            ON ST_Within(poi.geom, poly.geom)
-            WHERE poi.category IS NOT NULL
+            SELECT {group_by_clause}, poi.category, COUNT(*) AS count
+            FROM {temp_polygons_clone} AS poly
+            CROSS JOIN LATERAL (
+                SELECT category
+                FROM {poi_table} AS poi
+                WHERE poi.category IS NOT NULL
+                AND ST_Within(poi.geom, poly.geom)
+            ) AS poi
             GROUP BY {group_by_clause}, poi.category
             ORDER BY poi.category;
         """
@@ -497,13 +528,18 @@ def process_poi_validation(dataset_type: str, region: str, metric: str = None):
     
     db_raw = Database(settings.RAW_DATABASE_URI)
     db_local = Database(settings.LOCAL_DATABASE_URI)
-    
+     
     spatial_join_results = validator.run_core_validation_functions(db_raw, db_local, metric)
     unified_results = validator.compare_local_and_raw_results(spatial_join_results)
+    
     gpkg_output_path = os.path.join(validator.data_dir, dataset_type, f"{dataset_type}_validation_{region}.gpkg")
     validator.export_records_to_gpkg(unified_results, gpkg_output_path)
+    
     md_output_path = os.path.join(validator.data_dir, dataset_type, f"{dataset_type}_validation_{region}.md")
     validator.generate_markdown_report(unified_results, md_output_path, region=region, metric=metric)
+    
+    validator.drop_temp_geom_reference_table(db_local, validator.polygon_geom_table)
+
 
 if __name__ == "__main__":
     validate_poi()
