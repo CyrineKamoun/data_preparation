@@ -167,8 +167,8 @@ preparation:
     inherit: "supermarket"
 
 validation:
-  local_poi_table: "public.poi_osm_de"
-  raw_poi_table:
+  new_poi_table: "public.poi_osm_de"
+  old_poi_table:
     ["goat.poi_shopping", "goat.poi_health"]
   metrics:
     count:

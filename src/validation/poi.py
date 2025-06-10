@@ -29,55 +29,55 @@ class PoiValidation:
         self.region = region
         self.data_dir = settings.INPUT_DATA_DIR
         self.config = Config("poi", region)
-        self.raw_poi_tables = self.config.validation["raw_poi_table"]
-        self.local_poi_table = self.config.validation["local_poi_table"]
+        self.old_poi_tables = self.config.validation["old_poi_table"]
+        self.new_poi_table = self.config.validation["new_poi_table"]
         self.all_metrics = list(self.config.validation["metrics"].keys())
         self.default_metric = self.all_metrics[0] if self.all_metrics else "count"
         self.thresholds = self.config.validation["metrics"][self.default_metric]["thresholds"]
         self.geom_reference_query = self.config.validation["metrics"][self.default_metric]["geom_reference_query"]
         self.polygon_geom_table = self.geom_reference_query.split("FROM", 1)[1].strip().split()[0]
 
-    def create_temp_geom_reference_table(self, db_raw: Database, db_local: Database, temp_polygons_clone: str=None):
+    def create_temp_geom_reference_table(self, db_old: Database, db_new: Database, temp_polygons_clone: str=None):
         """
-        Copy polygons geometry reference table from raw to local using ogr2ogr.
+        Copy polygons geometry reference table from old to new using ogr2ogr.
 
         Args:
-            db_raw (Database): Database connection to the raw database.
-            db_local (Database): Database connection to the local database.
+            db_old (Database): Database connection to the old database.
+            db_new (Database): Database connection to the new database.
             metric (str, optional): The metric to use for validation. Defaults to None.
             temp_polygons_clone (str, optional): Name for the temporary polygons table. Defaults to None.
 
         Returns:
-            str: The name of the temporary polygon geometry reference table created in the local database.
+            str: The name of the temporary polygon geometry reference table created in the new database.
         """
 
         # Extract the polygon geomtry table name from the yaml definition inside validation object
-        print_info(f"Creating clone of {self.polygon_geom_table} in local database")
+        print_info(f"Creating clone of {self.polygon_geom_table} in new database")
         print_hashtags()
         
         # Copy the polygon table name using the geometry reference query to the temp_polygons_clone variable 
         if temp_polygons_clone is None:
             temp_polygons_clone = self.geom_reference_query.split("FROM")[1].strip().split()[0]
     
-        # Extract the local and raw db credentials to parse to ogr2ogr command
-        local_host = settings.LOCAL_DATABASE_URI.host
-        local_db = settings.LOCAL_DATABASE_URI.path.replace("/", "")
-        local_user = settings.LOCAL_DATABASE_URI.user
-        local_password = settings.LOCAL_DATABASE_URI.password
-        local_port = settings.LOCAL_DATABASE_URI.port
+        # Extract the new and old db credentials to parse to ogr2ogr command
+        new_host = settings.LOCAL_DATABASE_URI.host
+        new_db = settings.LOCAL_DATABASE_URI.path.replace("/", "")
+        new_user = settings.LOCAL_DATABASE_URI.user
+        new_password = settings.LOCAL_DATABASE_URI.password
+        new_port = settings.LOCAL_DATABASE_URI.port
         
-        # Extract the raw db credentials to parse to ogr2ogr command
-        raw_host = settings.RAW_DATABASE_URI.host
-        raw_db = settings.RAW_DATABASE_URI.path.replace("/", "")
-        raw_user = settings.RAW_DATABASE_URI.user
-        raw_password = settings.RAW_DATABASE_URI.password
-        raw_port = settings.RAW_DATABASE_URI.port
+        # Extract the old db credentials to parse to ogr2ogr command
+        old_host = settings.RAW_DATABASE_URI.host
+        old_db = settings.RAW_DATABASE_URI.path.replace("/", "")
+        old_user = settings.RAW_DATABASE_URI.user
+        old_password = settings.RAW_DATABASE_URI.password
+        old_port = settings.RAW_DATABASE_URI.port
         
-        # Run the ogr2ogr command to copy the polygon geometry reference table from raw to local database
+        # Run the ogr2ogr command to copy the polygon geometry reference table from old to new database
         ogr2ogr_command = (
             f"ogr2ogr -f 'PostgreSQL' "
-            f"PG:'host={local_host} dbname={local_db} user={local_user} password={local_password} port={local_port}' "
-            f"PG:'host={raw_host} dbname={raw_db} user={raw_user} password={raw_password} port={raw_port}' "
+            f"PG:'host={new_host} dbname={new_db} user={new_user} password={new_password} port={new_port}' "
+            f"PG:'host={old_host} dbname={old_db} user={old_user} password={old_password} port={old_port}' "
             f"-nln {temp_polygons_clone} -sql \"{self.geom_reference_query}\""
         )
     
@@ -107,38 +107,38 @@ class PoiValidation:
     
     def convert_geometry_query_columns_to_dict(self):
         """
-        This function extracts the column names from the polygon geometry reference query and creates a mapping dictionary for running queries on local and raw database.
+        This function extracts the column names from the polygon geometry reference query and creates a mapping dictionary for running queries on new and old database.
         
         Structure:
             {
-                "local_column_alias": "raw_column_name"
+                "new_column_alias": "old_column_name"
             }
         
         Returns:
             tuple: A tuple containing:
-                - local_and_raw_columns_mapping (dict): Mapping of local column aliases to raw column names.
-                - local_group_by_clause (str): Group by clause for local query.
-                - raw_group_by_clause (str): Group by clause for raw query.
+                - new_and_old_columns_mapping (dict): Mapping of new column aliases to old column names.
+                - new_group_by_clause (str): Group by clause for new query.
+                - old_group_by_clause (str): Group by clause for old query.
         """
         
         # Extract the columns part from the polygon geometry reference query and split it into individual columns
         columns_part = self.geom_reference_query.split("SELECT")[1].split("FROM")[0].strip()
         columns = [col.strip() for col in columns_part.split(",")]
 
-        # Build dictionary: {alias for local query: original_column for raw query}
-        local_and_raw_columns_mapping = {}
+        # Build dictionary: {alias for new query: original_column for old query}
+        new_and_old_columns_mapping = {}
         for col in columns:
             if " AS " in col:
                 original, alias = [x.strip() for x in col.split(" AS ")]
-                local_and_raw_columns_mapping[alias] = original
+                new_and_old_columns_mapping[alias] = original
             else:
-                local_and_raw_columns_mapping[col] = col
+                new_and_old_columns_mapping[col] = col
 
-        # Generate group by clauses for local and raw queries otherwise it will not work
-        local_group_by_clause = ", ".join(f"poly.{k}" for k in local_and_raw_columns_mapping.keys())
-        raw_group_by_clause = ", ".join(f"poly.{v}" for v in local_and_raw_columns_mapping.values())
+        # Generate group by clauses for new and old queries otherwise it will not work
+        new_group_by_clause = ", ".join(f"poly.{k}" for k in new_and_old_columns_mapping.keys())
+        old_group_by_clause = ", ".join(f"poly.{v}" for v in new_and_old_columns_mapping.values())
         
-        return local_and_raw_columns_mapping, local_group_by_clause, raw_group_by_clause
+        return new_and_old_columns_mapping, new_group_by_clause, old_group_by_clause
         
     def perform_spatial_intersection(self, db, poi_table, temp_polygons_clone, group_by_clause, metric=None):
         
@@ -146,10 +146,10 @@ class PoiValidation:
         Perform spatial intersection between POI table and polygons table.
         
         Args:
-            db (Database): Database connection to the local or raw database.
+            db (Database): Database connection to the new or old database.
             poi_table (str): Name of the POI table to perform intersection with.
             temp_polygons_clone (str): Name of the temporary polygons clone table.
-            group_by_clause (str): Group by clause for the spatial join query (local or raw).
+            group_by_clause (str): Group by clause for the spatial join query (new or old).
             metric (str, optional): The metric to use for validation. Defaults to None.
         
         Returns:
@@ -160,7 +160,7 @@ class PoiValidation:
         print_info(f"Performing spatial intersection between {poi_table} and {temp_polygons_clone}")
         print_hashtags()
 
-        # Generate the spatial join query using the group by clause and poi_table for local or raw database
+        # Generate the spatial join query using the group by clause and poi_table for new or old database
         # spatial_join_query = f"""
         #     SELECT {group_by_clause}, poi.category, COUNT(poi.category) AS count
         #     FROM {temp_polygons_clone} AS poly JOIN {poi_table} AS poi
@@ -186,116 +186,116 @@ class PoiValidation:
         
         return spatial_join_results
 
-    def run_core_validation_functions(self, db_raw, db_local, metric=None):
+    def run_core_validation_functions(self, db_old, db_new, metric=None):
         
         """
-        Run the core validation functions to create merged results for local and raw POI tables.
+        Run the core validation functions to create merged results for new and old POI tables.
         
         Args:
-            db_raw (Database): Database connection to the raw database.
-            db_local (Database): Database connection to the local database.
+            db_old (Database): Database connection to the old database.
+            db_new (Database): Database connection to the new database.
             metric (str, optional): The metric to use for validation. Defaults to None.
             
         Returns:
-            dict: A dictionary containing spatial join results for local and raw POI tables.
+            dict: A dictionary containing spatial join results for new and old POI tables.
         """
         
-        print_info(f"Creating merged results for local and raw POI tables")
+        print_info(f"Creating merged results for new and old POI tables")
         print_hashtags()
         
-        # Initiate the spatial join results dictionary to hold  local and raw join results
+        # Initiate the spatial join results dictionary to hold  new and old join results
         spatial_join_results = {
-            "local": {},
-            "raw": {}
+            "new": {},
+            "old": {}
         }
         
-        # Step 1: Run the actual function to create the polygon geometry reference table in local database
-        temp_geom_clone_table = self.create_temp_geom_reference_table(db_raw, db_local, metric)
+        # Step 1: Run the actual function to create the polygon geometry reference table in new database
+        temp_geom_clone_table = self.create_temp_geom_reference_table(db_old, db_new, metric)
         # Step 2: Convert the geometry query columns to a mapping dictionary
-        local_and_raw_columns_mapping, local_group_by_clause, raw_group_by_clause = self.convert_geometry_query_columns_to_dict()
+        new_and_old_columns_mapping, new_group_by_clause, old_group_by_clause = self.convert_geometry_query_columns_to_dict()
         
         # Step 3: Prepare they keys for mapping. These keys are appended in the final results for export 
-        local_keys = [f"local_{k}" for k in local_and_raw_columns_mapping.keys()] + ["local_category", "new_count"]
-        raw_keys = [f"raw_{v}" for v in local_and_raw_columns_mapping.values()] + ["raw_category", "old_count"]
+        new_keys = [f"new_{k}" for k in new_and_old_columns_mapping.keys()] + ["new_category", "new_count"]
+        old_keys = [f"old_{v}" for v in new_and_old_columns_mapping.values()] + ["old_category", "old_count"]
 
-        # Step 4: Perform spatial intersection between POI table and polygons table for local database
-        local_results_raw = self.perform_spatial_intersection(
-            db_local, self.local_poi_table, temp_geom_clone_table, local_group_by_clause, metric
+        # Step 4: Perform spatial intersection between POI table and polygons table for new database
+        new_results_old = self.perform_spatial_intersection(
+            db_new, self.new_poi_table, temp_geom_clone_table, new_group_by_clause, metric
         )
         
-        # Step 5: Map the local results to a list of dictionaries with keys
-        local_results = [
-            dict(zip(local_keys, row))
-            for row in local_results_raw
+        # Step 5: Map the new results to a list of dictionaries with keys
+        new_results = [
+            dict(zip(new_keys, row))
+            for row in new_results_old
         ]
         
-        # Step 6: Store the local results in the spatial join results dictionary
-        spatial_join_results["local"][self.local_poi_table] = local_results
+        # Step 6: Store the new results in the spatial join results dictionary
+        spatial_join_results["new"][self.new_poi_table] = new_results
 
-        # Step 7: Perform spatial intersection for each raw POI table in iteration with polygons table and store results in the raw key of spatial join results
-        for raw_poi_table in self.raw_poi_tables:
-            raw_results_raw = self.perform_spatial_intersection(
-                db_raw, raw_poi_table, temp_geom_clone_table, raw_group_by_clause, metric
+        # Step 7: Perform spatial intersection for each old POI table in iteration with polygons table and store results in the old key of spatial join results
+        for old_poi_table in self.old_poi_tables:
+            old_results_old = self.perform_spatial_intersection(
+                db_old, old_poi_table, temp_geom_clone_table, old_group_by_clause, metric
             )
-            raw_results = [
-                dict(zip(raw_keys, row))
-                for row in raw_results_raw
+            old_results = [
+                dict(zip(old_keys, row))
+                for row in old_results_old
             ]
-            spatial_join_results["raw"][raw_poi_table] = raw_results
+            spatial_join_results["old"][old_poi_table] = old_results
             
         return spatial_join_results
 
-    def compare_local_and_raw_results(self, spatial_join_results):
+    def compare_new_and_old_results(self, spatial_join_results):
         
         """
-        Compare local and raw results based on matching id, name, geom, and category.
+        Compare new and old results based on matching id, name, geom, and category.
         
         Args:
-            spatial_join_results (dict): Dictionary containing spatial join results for local and raw POI tables.
+            spatial_join_results (dict): Dictionary containing spatial join results for new and old POI tables.
         
         Returns:
-            dict: A filtered dictionary containing unified results with comparison of local and raw records.
+            dict: A filtered dictionary containing unified results with comparison of new and old pois.
         """
         
-        print_info(f"Filtering records based on matching id, name, geom, and category")
+        print_info(f"Filtering pois based on matching id, name, geom, and category")
         print_hashtags()
         
         # Initialize the unified results dictionary to hold the comparison results
         unified_results = {}
 
-        # Get the local results (should be a list of dicts) from the spatial join results
-        local_records = spatial_join_results["local"].get(self.local_poi_table, [])
+        # Get the new results (should be a list of dicts) from the spatial join results
+        new_pois = spatial_join_results["new"].get(self.new_poi_table, [])
 
-        # Dynamically get the column keys from the key mapping dictionary for local and raw tables
-        local_and_raw_columns_mapping, _, _ = self.convert_geometry_query_columns_to_dict()
-        local_keys = [f"local_{k}" for k in local_and_raw_columns_mapping.keys()]
+        # Dynamically get the column keys from the key mapping dictionary for new and old tables
+        new_and_old_columns_mapping, _, _ = self.convert_geometry_query_columns_to_dict()
+        new_keys = [f"new_{k}" for k in new_and_old_columns_mapping.keys()]
         # Category is a special case, so we add it separately since it is not in the mapping and reference query
-        local_category_key = "local_category"
+        new_category_key = "new_category"
 
-        # Build a lookup for local records: (id, name, geom, category) -> record
-        local_lookup = {}
-        for rec in local_records:
+        # Build a lookup for new pois: (id, name, geom, category) -> record
+        new_lookup = {}
+        for rec in new_pois:
             # Build the key tuple dynamically (all mapped keys + category)
-            key = tuple(rec.get(k) for k in local_keys) + (rec.get(local_category_key),)
-            local_lookup[key] = rec
+            key = tuple(rec.get(k) for k in new_keys) + (rec.get(new_category_key),)
+            new_lookup[key] = rec
 
-        # Define the raw keys based on the mapping dictionary to be matched with the local keys for filtering
-        raw_keys = [f"raw_{v}" for v in local_and_raw_columns_mapping.values()]
-        raw_category_key = "raw_category"
+        # Define the old keys based on the mapping dictionary to be matched with the new keys for filtering
+        old_keys = [f"old_{v}" for v in new_and_old_columns_mapping.values()]
+        old_category_key = "old_category"
 
-        # This loop runs over the raw results and then matches them with the local records
-        for raw_table, raw_records in spatial_join_results["raw"].items():
+        # This loop runs over the old results and then matches them with the new pois
+        for old_table, old_pois in spatial_join_results["old"].items():
             comparison_list = []
-            # For each raw record, create a key and check if it exists in the local lookup            
-            for raw_rec in raw_records:
-                key = tuple(raw_rec.get(k) for k in raw_keys) + (raw_rec.get(raw_category_key),)
-                local_rec = local_lookup.get(key)
-                # If a matching local record is found, calculate the percentage difference
-                if local_rec:
-                    new_count = local_rec.get("new_count", 0)
-                    old_count = raw_rec.get("old_count", 0)
+            # For each old record, create a key and check if it exists in the new lookup            
+            for old_rec in old_pois:
+                key = tuple(old_rec.get(k) for k in old_keys) + (old_rec.get(old_category_key),)
+                new_rec = new_lookup.get(key)
+                # If a matching new record is found, calculate the percentage difference
+                if new_rec:
+                    new_count = new_rec.get("new_count", 0)
+                    old_count = old_rec.get("old_count", 0)
                     try:
-                        # Calculate percentage difference: ((local - raw) / raw) * 100
+                        # Calculate percentage difference: ((new - old) / old) * 100
                         if float(old_count) != 0:
                             difference = round(((float(new_count) - float(old_count)) / float(old_count)) * 100, 2)
                         else:
@@ -303,38 +303,38 @@ class PoiValidation:
                     except Exception:
                         difference = None
                     
-                    # Prepare the output that contains the comparison results and filters out duplicate column names either from local or raw columns
-                    #  id, name, category, geom come from either local or raw records
-                    # new_count and old_count are the counts from local and raw records respectively
+                    # Prepare the output that contains the comparison results and filters out duplicate column names either from new or old columns
+                    #  id, name, category, geom come from either new or old pois
+                    # new_count and old_count are the counts from new and old pois respectively
                     # perc_diff is the calculated percentage difference
                     output = {
-                        "id": local_rec.get(local_keys[0]),
-                        "name": local_rec.get(local_keys[1]),
-                        "category": local_rec.get(local_category_key),
+                        "id": new_rec.get(new_keys[0]),
+                        "name": new_rec.get(new_keys[1]),
+                        "category": new_rec.get(new_category_key),
                         "new_count": new_count,
                         "old_count": old_count,
                         "perc_diff": difference,
-                        "geom": local_rec.get(local_keys[2]),
+                        "geom": new_rec.get(new_keys[2]),
                     }
                     comparison_list.append(output)
-            unified_results[raw_table] = comparison_list
+            unified_results[old_table] = comparison_list
 
         return unified_results
 
-    def export_records_to_gpkg(self, records, output_path):
+    def export_pois_to_gpkg(self, pois, output_path):
         
         """
         Export the validation results to a GPKG file, creating separate layers for each category.
         
         Args:
-            records (dict): Dictionary containing the validation results.
+            pois (dict): Dictionary containing the validation results.
             output_path (str): Path to the output GPKG file.
         """
         
         print_info(f"Exporting to GPKG: {output_path}")
         print_hashtags()
         
-        for raw_table, recs in records.items():
+        for old_table, recs in pois.items():
             if not recs:
                 continue
             
@@ -344,7 +344,7 @@ class PoiValidation:
             if not geom_key or not category_key:
                 continue
 
-            # Prepare the dataframe to hold the records for export
+            # Prepare the dataframe to hold the pois for export
             df = pd.DataFrame(recs)
 
             # Convert geometry column to shapely objects for spatial export
@@ -365,18 +365,18 @@ class PoiValidation:
 
             # Export each category as a separate layer inside the GPKG file
             for category, group in df.groupby(category_key):
-                table_name = raw_table.split(".", 1)[1]
+                table_name = old_table.split(".", 1)[1]
                 layer_name = f"{table_name}-{str(category)}"
                 gdf = gpd.GeoDataFrame(group.drop(columns=[geom_key]), geometry="geometry", crs="EPSG:4326")
                 gdf.to_file(output_path, layer=layer_name, driver="GPKG")
 
-    def generate_markdown_report(self, records, output_path, region, metric):
+    def generate_markdown_report(self, pois, output_path, region, metric):
         
         """
         Generate a Markdown report summarizing the validation results.
         
         Args:
-            records (dict): Dictionary containing the validation results.
+            pois (dict): Dictionary containing the validation results.
             output_path (str): Path to the output Markdown file.
             region (str): The region for which the report is generated.
             metric (str, optional): The metric to use for validation. Defaults to None.
@@ -386,7 +386,7 @@ class PoiValidation:
         print_hashtags()
 
         # Setup configuration
-        local_table = self.local_poi_table
+        new_table = self.new_poi_table
         metric = metric or self.default_metric
         metric_config = self.config.validation["metrics"][metric]
         thresholds = metric_config.get("thresholds", {})
@@ -409,15 +409,15 @@ class PoiValidation:
             )
             f.write(f"# Validation Report - **{metric.upper()}** Metric\n\n")
 
-            for raw_table, recs in records.items():
+            for old_table, recs in pois.items():
                 if not recs:
                     continue
 
                 # Section Header Info
                 f.write(f"### 📄 Table Details\n\n")
                 f.write(f"- **Polygon Reference Table:** `{self.polygon_geom_table}`\n")
-                f.write(f"- **Raw Database Table:** `{raw_table}`\n")
-                f.write(f"- **Local Database Table:** `{local_table}`\n")
+                f.write(f"- **Raw Database Table:** `{old_table}`\n")
+                f.write(f"- **Local Database Table:** `{new_table}`\n")
                 f.write(f"- **Region:** `{region}`\n")
                 f.write(f"- **Metric:** `{metric}`\n")
                 f.write(f"- **Units:** `{units}`\n\n")
@@ -435,8 +435,8 @@ class PoiValidation:
                 for rec in recs:
                     category = str(rec["category"]).capitalize()
                     county = rec.get("name", "")
-                    raw_val = float(rec.get("old_count", 0))
-                    local_val = float(rec.get("new_count", 0))
+                    old_val = float(rec.get("old_count", 0))
+                    new_val = float(rec.get("new_count", 0))
                     diff = rec.get("perc_diff", 0)
                     threshold = thresholds.get(str(rec["category"]).lower(), thresholds.get("default", 0))
                     region_id = rec.get("id", "")
@@ -445,19 +445,19 @@ class PoiValidation:
                     is_violation = diff is not None and threshold is not None and abs(diff) > float(threshold)
                     if is_violation:
                         violations.append([
-                            category, county, f"{raw_val:.2f}", f"{local_val:.2f}",
+                            category, county, f"{old_val:.2f}", f"{new_val:.2f}",
                             f"{diff:.2f}%", f"{float(threshold):.2f}%", region_id
                         ])
 
                     # This snippet updates the summary statistics for each category
                     cat_key = str(rec["category"]).lower()
                     summary_stats.setdefault(cat_key, {
-                        "violations": 0, "raw_total": 0, "local_total": 0, "diffs": []
+                        "violations": 0, "old_total": 0, "new_total": 0, "diffs": []
                     })
                     if is_violation:
                         summary_stats[cat_key]["violations"] += 1
-                    summary_stats[cat_key]["raw_total"] += raw_val
-                    summary_stats[cat_key]["local_total"] += local_val
+                    summary_stats[cat_key]["old_total"] += old_val
+                    summary_stats[cat_key]["new_total"] += new_val
                     if diff is not None:
                         summary_stats[cat_key]["diffs"].append(abs(diff))
 
@@ -475,7 +475,7 @@ class PoiValidation:
                 stats_headers = ["Statistic", "Value"]
                 stats_rows = [
                     ["Regions Analyzed", len(set(rec.get("id") for rec in recs))],
-                    ["Records Analyzed", len(recs)],
+                    ["POIs Analyzed", len(recs)],
                     ["Violations Found", len(violations)],
                     ["Violation Rate", f"{(len(violations) / len(recs) * 100):.2f}%" if recs else "0.00%"]
                 ]
@@ -489,7 +489,7 @@ class PoiValidation:
                 # 📋 Violation Breakdown by Category Section
                 f.write("## 📋 Violation Breakdown by Category\n\n")
                 breakdown_headers = [
-                    "Category", "Violations", "Raw Total", "Local Total", "Avg Diff (%)", "Max Diff (%)"
+                    "Category", "Violations", "Old Total", "New Total", "Avg Diff (%)", "Max Diff (%)"
                 ]
                 breakdown_rows = []
                 for cat, stats in summary_stats.items():
@@ -498,8 +498,8 @@ class PoiValidation:
                     breakdown_rows.append([
                         cat,
                         stats["violations"],
-                        f"{stats['raw_total']:.2f}",
-                        f"{stats['local_total']:.2f}",
+                        f"{stats['old_total']:.2f}",
+                        f"{stats['new_total']:.2f}",
                         f"{avg_diff:.2f}",
                         f"{max_diff:.2f}"
                     ])
@@ -526,19 +526,19 @@ def process_poi_validation(dataset_type: str, region: str, metric: str = None):
     """Process POI validation for single or all metrics."""
     validator = PoiValidation(db_config=settings, region=region)
     
-    db_raw = Database(settings.RAW_DATABASE_URI)
-    db_local = Database(settings.LOCAL_DATABASE_URI)
+    db_old = Database(settings.RAW_DATABASE_URI)
+    db_new = Database(settings.LOCAL_DATABASE_URI)
      
-    spatial_join_results = validator.run_core_validation_functions(db_raw, db_local, metric)
-    unified_results = validator.compare_local_and_raw_results(spatial_join_results)
+    spatial_join_results = validator.run_core_validation_functions(db_old, db_new, metric)
+    unified_results = validator.compare_new_and_old_results(spatial_join_results)
     
     gpkg_output_path = os.path.join(validator.data_dir, dataset_type, f"{dataset_type}_validation_{region}.gpkg")
-    validator.export_records_to_gpkg(unified_results, gpkg_output_path)
+    validator.export_pois_to_gpkg(unified_results, gpkg_output_path)
     
     md_output_path = os.path.join(validator.data_dir, dataset_type, f"{dataset_type}_validation_{region}.md")
     validator.generate_markdown_report(unified_results, md_output_path, region=region, metric=metric)
     
-    validator.drop_temp_geom_reference_table(db_local, validator.polygon_geom_table)
+    validator.drop_temp_geom_reference_table(db_new, validator.polygon_geom_table)
 
 
 if __name__ == "__main__":
