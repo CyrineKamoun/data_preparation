@@ -208,11 +208,12 @@ validation:
     - name
     - category
     - geom
-    search_radius_m: 30       # Max distance in meters for finding nearby POIs
+    excluded_categories: ['bus_stop', 'bus_station']
+    search_radius_m: 40       # Max distance in meters for finding nearby POIs
     weights:
       name: 0.6          # Weight for name similarity in combined score
       category: 0.4      # Weight for category similarity in combined score
-    threshold_lcs: 0.8        # Overall similarity threshold for flagging a match
+    threshold_lcs: 0.55        # Overall similarity threshold for flagging a match
 
 
 subscription:
