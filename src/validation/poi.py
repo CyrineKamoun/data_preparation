@@ -42,6 +42,7 @@ class PoiValidation:
 
         self.lcs_config = self.config.validation['lcs']
         self.poi_columns = self.lcs_config['poi_columns']
+        self.excluded_categories = self.lcs_config['excluded_categories']
         self.proximity_radius_m = self.lcs_config['search_radius_m']
         self.name_weight = self.lcs_config['weights']['name']
         self.category_weight = self.lcs_config['weights']['category']
@@ -570,268 +571,364 @@ class PoiValidation:
                     f.write(format_row(row, breakdown_col_widths))
                 f.write("\n\n---\n\n")
 
-    # ********************** LOWEST COMMON SUBSEQUENCE (LCS) ANALYSIS **********************
-    
-    def normalize_string(self, s: str) -> str:
-        """
-        Normalize a string by converting it to lowercase and stripping whitespace.
+    # ************************************************************************************** #
+    # ********************** LOWEST COMMON SUBSEQUENCE (LCS) ANALYSIS ********************** #
+    # ************************************************************************************** #
 
-        Args:
-            s (str): The string to normalize.
-        
-        Returns:
-            str: The normalized string.
-        """
-        
-        if s is None:
-            return ""
-        return str(s).lower().strip()
+    # def normalize_string(self, s: str) -> str:
+    #     """
+    #     Normalize a string by converting it to lowercase and stripping whitespace.
 
-    def calculate_string_similarity_ratio(self, s1: str, s2: str) -> float:
+    #     Args:
+    #         s (str): The string to normalize.
         
-        """
-        Calculate the similarity ratio between two strings using the Levenshtein distance.
+    #     Returns:
+    #         str: The normalized string.
+    #     """
         
-        Args:
-            s1 (str): The first string.
-            s2 (str): The second string.
+    #     if s is None:
+    #         return ""
+    #     return str(s).lower().strip()
+
+    # def calculate_string_similarity_ratio(self, s1: str, s2: str) -> float:
+        
+    #     """
+    #     Calculate the similarity ratio between two strings using the Levenshtein distance.
+        
+    #     Args:
+    #         s1 (str): The first string.
+    #         s2 (str): The second string.
             
-        Returns:
-            float: The similarity ratio between the two strings, ranging from 0.0 to 1.0.
-            1.0 means identical, 0.0 means completely different.
-        """
+    #     Returns:
+    #         float: The similarity ratio between the two strings, ranging from 0.0 to 1.0.
+    #         1.0 means identical, 0.0 means completely different.
+    #     """
         
-        s1_norm = self.normalize_string(s1)
-        s2_norm = self.normalize_string(s2)
-        if not s1_norm and not s2_norm:
-            return 1.0
-        if not s1_norm or not s2_norm:
-            return 0.0
+    #     s1_norm = self.normalize_string(s1)
+    #     s2_norm = self.normalize_string(s2)
+    #     if not s1_norm and not s2_norm:
+    #         return 1.0
+    #     if not s1_norm or not s2_norm:
+    #         return 0.0
         
-        ratio = difflib.SequenceMatcher(None, s1_norm, s2_norm).ratio()
+    #     ratio = difflib.SequenceMatcher(None, s1_norm, s2_norm).ratio()
         
-        return ratio
+    #     return ratio
 
-    def parse_wkt_point(self, geom_str: str) -> Optional[Tuple[float, float]]:
+    # def parse_wkt_point(self, geom_str: str) -> Optional[Tuple[float, float]]:
         
-        """
-        Parse a WKT or WKB geometry string and return the coordinates of a Point geometry.
+    #     """
+    #     Parse a WKT or WKB geometry string and return the coordinates of a Point geometry.
         
-        Args:
-            geom_str (str): The geometry string in WKT or WKB format.
-        If the string is not a valid geometry, it returns None.
-        Returns:
-            Optional[Tuple[float, float]]: A tuple containing the latitude and longitude of the point,
-            or None if the geometry is not a valid Point.
-        """
+    #     Args:
+    #         geom_str (str): The geometry string in WKT or WKB format.
+    #     If the string is not a valid geometry, it returns None.
+    #     Returns:
+    #         Optional[Tuple[float, float]]: A tuple containing the latitude and longitude of the point,
+    #         or None if the geometry is not a valid Point.
+    #     """
         
-        if not isinstance(geom_str, str):
-            return None
-        # Try WKT first
-        try:
-            geom = wkt.loads(geom_str)
-            if geom.geom_type == "Point":
-                return (geom.y, geom.x)
-        except Exception:
-            pass
-        # Try WKB hex
-        try:
-            geom = wkb.loads(geom_str, hex=True)
-            if geom.geom_type == "Point":
-                return (geom.y, geom.x)
-        except Exception:
-            pass
-        print_warning(f"Could not parse geometry point: '{geom_str}'")
-        return None
+    #     if not isinstance(geom_str, str):
+    #         return None
+    #     # Try WKT first
+    #     try:
+    #         geom = wkt.loads(geom_str)
+    #         if geom.geom_type == "Point":
+    #             return (geom.y, geom.x)
+    #     except Exception:
+    #         pass
+    #     # Try WKB hex
+    #     try:
+    #         geom = wkb.loads(geom_str, hex=True)
+    #         if geom.geom_type == "Point":
+    #             return (geom.y, geom.x)
+    #     except Exception:
+    #         pass
+    #     print_warning(f"Could not parse geometry point: '{geom_str}'")
+    #     return None
 
-    def euclidean_distance(self, coord1, coord2):
+    # def euclidean_distance(self, coord1, coord2):
         
-        """
-        Calculate the Euclidean distance between two points in meters.
+    #     """
+    #     Calculate the Euclidean distance between two points in meters.
 
-        Args:
-            coord1 (Tuple[float, float]): The (latitude, longitude) of the first point.
-            coord2 (Tuple[float, float]): The (latitude, longitude) of the second point.
+    #     Args:
+    #         coord1 (Tuple[float, float]): The (latitude, longitude) of the first point.
+    #         coord2 (Tuple[float, float]): The (latitude, longitude) of the second point.
 
-        Returns:
-            float: The distance between the two points in meters.
-        """
+    #     Returns:
+    #         float: The distance between the two points in meters.
+    #     """
         
-        R = 6371000  # Earth radius in meters
-        lat1, lon1 = radians(coord1[0]), radians(coord1[1])
-        lat2, lon2 = radians(coord2[0]), radians(coord2[1])
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-        c = 2 * atan2(sqrt(a), sqrt(1-a))
-        distance = R * c
-        return distance
+    #     R = 6371000  # Earth radius in meters
+    #     lat1, lon1 = radians(coord1[0]), radians(coord1[1])
+    #     lat2, lon2 = radians(coord2[0]), radians(coord2[1])
+    #     dlon = lon2 - lon1
+    #     dlat = lat2 - lat1
+    #     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+    #     c = 2 * atan2(sqrt(a), sqrt(1-a))
+    #     distance = R * c
+    #     return distance
 
-    def build_kdtree(self, main_df):
+    # def build_kdtree(self, main_df):
         
-        """
-        Build a KDTree for efficient spatial queries.
+    #     """
+    #     Build a KDTree for efficient spatial queries.
         
-        Args:
-            main_df (pd.DataFrame): The DataFrame containing POI data with 'geom' column.
+    #     Args:
+    #         main_df (pd.DataFrame): The DataFrame containing POI data with 'geom' column.
             
-        Returns:
-            tuple: A tuple containing:
-                - kd_tree (KDTree): The KDTree built from the coordinates of the POIs.
-                - coords_for_kd_tree (List[Tuple[float, float]]): List of coordinates used to build the KDTree.
-                - original_indices (List[int]): List of original indices from the main DataFrame corresponding to the coordinates.
-        """
+    #     Returns:
+    #         tuple: A tuple containing:
+    #             - kd_tree (KDTree): The KDTree built from the coordinates of the POIs.
+    #             - coords_for_kd_tree (List[Tuple[float, float]]): List of coordinates used to build the KDTree.
+    #             - original_indices (List[int]): List of original indices from the main DataFrame corresponding to the coordinates.
+    #     """
         
-        print_info("Building KDTree for POI geometries")
-        print_hashtags()
+    #     print_info("Building KDTree for POI geometries")
+    #     print_hashtags()
         
-        coords_for_kd_tree = []
-        original_indices = []
-        for idx, row in main_df[['geom']].dropna().iterrows():
-            coords = self.parse_wkt_point(row['geom'])
-            if coords:
-                coords_for_kd_tree.append(coords)
-                original_indices.append(idx)
-            else:
-                print_warning(f"Skipping POI (index: {idx}) due to unparsable geometry for KDTree.")
-        if not coords_for_kd_tree:
-            print_error("No valid POI geometries found for KDTree construction. LCS analysis cannot proceed.")
-            return None, None, None
-        kd_tree = KDTree(coords_for_kd_tree)
-        print_info(f"KDTree built for {len(coords_for_kd_tree)} POIs")
-        print_hashtags()
-        return kd_tree, coords_for_kd_tree, original_indices
+    #     coords_for_kd_tree = []
+    #     original_indices = []
+    #     for idx, row in main_df[['geom']].dropna().iterrows():
+    #         coords = self.parse_wkt_point(row['geom'])
+    #         if coords:
+    #             coords_for_kd_tree.append(coords)
+    #             original_indices.append(idx)
+    #         else:
+    #             print_warning(f"Skipping POI (index: {idx}) due to unparsable geometry for KDTree.")
+    #     if not coords_for_kd_tree:
+    #         print_error("No valid POI geometries found for KDTree construction. LCS analysis cannot proceed.")
+    #         return None, None, None
+    #     kd_tree = KDTree(coords_for_kd_tree)
+    #     print_info(f"KDTree built for {len(coords_for_kd_tree)} POIs")
+    #     print_hashtags()
+    #     return kd_tree, coords_for_kd_tree, original_indices
 
 
-    def compute_lcs_matches(self, main_df, kd_tree, original_indices):
+    # def compute_lcs_matches(self, main_df, kd_tree, original_indices):
         
-        """
-        Compute LCS (Longest Common Subsequence) matches between POIs.
+    #     """
+    #     Compute LCS (Longest Common Subsequence) matches between POIs.
         
-        Args:
-            main_df (pd.DataFrame): The DataFrame containing POI data with 'id', 'name', 'category', and 'geom' columns.
-            kd_tree (KDTree): The KDTree built from the coordinates of the POIs.
-            original_indices (List[int]): List of original indices from the main DataFrame corresponding to the coordinates.
+    #     Args:
+    #         main_df (pd.DataFrame): The DataFrame containing POI data with 'id', 'name', 'category', and 'geom' columns.
+    #         kd_tree (KDTree): The KDTree built from the coordinates of the POIs.
+    #         original_indices (List[int]): List of original indices from the main DataFrame corresponding to the coordinates.
         
-        Returns:
-            pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
-            reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
-        """
+    #     Returns:
+    #         pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
+    #         reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
+    #     """
         
-        print_info(f"Starting LCS similarity analysis for {len(main_df)} POIs")
-        print_hashtags()
+    #     print_info(f"Starting LCS similarity analysis for {len(main_df)} POIs")
+    #     print_hashtags()
         
-        results_list = []
-        # This loop iterates over each reference POI and finds potential matches within the KDTree
-        for index, ref in main_df.iterrows():
-            # Extract reference POI details
-            ref_id = ref.get('id')
-            ref_name = ref.get('name')
-            ref_category = ref.get('category')
-            ref_geom = ref.get('geom')
-            ref_coords = self.parse_wkt_point(ref_geom)
-            if pd.isna(ref_name) or pd.isna(ref_category) or ref_coords is None:
-                continue
+    #     results_list = []
+    #     # This loop iterates over each reference POI and finds potential matches within the KDTree
+    #     for index, ref in main_df.iterrows():
+    #         # Extract reference POI details
+    #         ref_id = ref.get('id')
+    #         ref_name = ref.get('name')
+    #         ref_category = ref.get('category')
+    #         ref_geom = ref.get('geom')
+    #         ref_coords = self.parse_wkt_point(ref_geom)
+    #         if pd.isna(ref_name) or pd.isna(ref_category) or ref_coords is None:
+    #             continue
 
-            # Convert meters to degrees (approximate, since 1 degree ≈ 111 km at the equator)
-            # This function finds all indices in the KDTree that are within the proximity radius
-            indices_in_approx_range = kd_tree.query_ball_point(
-                ref_coords, r=self.proximity_radius_m / 111000.0
-            )
-            # Loop over each comparison POI found in the KDTree to get the relevant values below
-            for idx_kd_tree in indices_in_approx_range:
-                original_idx = original_indices[idx_kd_tree]
-                comp = main_df.loc[original_idx]
-                comp_id = comp.get('id')
-                comp_name = comp.get('name')
-                comp_category = comp.get('category')
-                comp_geom = comp.get('geom')
-                comp_coords = self.parse_wkt_point(comp_geom)
-                if ref_id == comp_id:
-                    continue
-                if pd.isna(comp_name) or pd.isna(comp_category) or comp_coords is None:
-                    continue
-                geodesic_dist_m = round(self.euclidean_distance(ref_coords, comp_coords), 2)
-                name_lcs = round(self.calculate_string_similarity_ratio(ref_name, comp_name), 2)
-                category_lcs = round(self.calculate_string_similarity_ratio(ref_category, comp_category), 2)
-                overall_lcs = round((name_lcs * self.name_weight) + (category_lcs * self.category_weight), 2)
-                flagged = overall_lcs >= self.threshold_lcs
+    #         # Convert meters to degrees (approximate, since 1 degree ≈ 111 km at the equator)
+    #         # This function finds all indices in the KDTree that are within the proximity radius
+    #         indices_in_approx_range = kd_tree.query_ball_point(
+    #             ref_coords, r=self.proximity_radius_m / 111000.0
+    #         )
+    #         # Loop over each comparison POI found in the KDTree to get the relevant values below
+    #         for idx_kd_tree in indices_in_approx_range:
+    #             original_idx = original_indices[idx_kd_tree]
+    #             comp = main_df.loc[original_idx]
+    #             comp_id = comp.get('id')
+    #             comp_name = comp.get('name')
+    #             comp_category = comp.get('category')
+    #             comp_geom = comp.get('geom')
+    #             comp_coords = self.parse_wkt_point(comp_geom)
+    #             if ref_id == comp_id:
+    #                 continue
+    #             if pd.isna(comp_name) or pd.isna(comp_category) or comp_coords is None:
+    #                 continue
+    #             geodesic_dist_m = round(self.euclidean_distance(ref_coords, comp_coords), 2)
+    #             name_lcs = round(self.calculate_string_similarity_ratio(ref_name, comp_name), 2)
+    #             category_lcs = round(self.calculate_string_similarity_ratio(ref_category, comp_category), 2)
+    #             overall_lcs = round((name_lcs * self.name_weight) + (category_lcs * self.category_weight), 2)
+    #             flagged = overall_lcs >= self.threshold_lcs
                 
-                # Append the results to the results_list
-                results_list.append({
-                    'ref_id': ref_id,
-                    'ref_name': ref_name,
-                    'ref_category': ref_category,
-                    'ref_geom': ref_geom,
-                    'comp_id': comp_id,
-                    'comp_name': comp_name,
-                    'comp_category': comp_category,
-                    'comp_geom': comp_geom,
-                    'geodesic_dist_m': geodesic_dist_m,
-                    'name_lcs': name_lcs,
-                    'category_lcs': category_lcs,
-                    'overall_lcs': overall_lcs,
-                    'threshold_lcs': round(self.threshold_lcs, 2),
-                    'flagged': flagged
-                })
-        print_info(f"LCS similarity analysis complete with {len(results_list)} comparison pairs")
-        print_hashtags()
-        return pd.DataFrame(results_list)
+    #             # Append the results to the results_list
+    #             results_list.append({
+    #                 'ref_id': ref_id,
+    #                 'ref_name': ref_name,
+    #                 'ref_category': ref_category,
+    #                 'ref_geom': ref_geom,
+    #                 'comp_id': comp_id,
+    #                 'comp_name': comp_name,
+    #                 'comp_category': comp_category,
+    #                 'comp_geom': comp_geom,
+    #                 'geodesic_dist_m': geodesic_dist_m,
+    #                 'name_lcs': name_lcs,
+    #                 'category_lcs': category_lcs,
+    #                 'overall_lcs': overall_lcs,
+    #                 'threshold_lcs': round(self.threshold_lcs, 2),
+    #                 'flagged': flagged
+    #             })
+    #     print_info(f"LCS similarity analysis complete with {len(results_list)} comparison pairs")
+    #     print_hashtags()
+    #     return pd.DataFrame(results_list)
 
-    def analyze_lcs_similarity(self, df: pd.DataFrame) -> pd.DataFrame:
+    # def analyze_lcs_similarity(self, df: pd.DataFrame) -> pd.DataFrame:
         
-        """
-        Takes a dataframe of POI data and performs LCS similarity analysis using the helper function compute_lcs_matches().
+    #     """
+    #     Takes a dataframe of POI data and performs LCS similarity analysis using the helper function compute_lcs_matches().
 
+    #     Args:
+    #         df (pd.DataFrame): DataFrame containing POI data with 'id', 'name', 'category', and 'geom' columns.
+            
+    #     Returns:
+    #         pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
+    #         reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
+    #     """
+        
+    #     main_df = df[df['name'].notnull() & df['category'].notnull()]
+    #     if main_df.empty:
+    #         print_warning("No POI data found for LCS analysis. Check config.yaml and database connection.")
+    #         return pd.DataFrame()
+    #     kd_tree, coords_for_kd_tree, original_indices = self.build_kdtree(main_df)
+    #     if kd_tree is None:
+    #         return pd.DataFrame()
+    #     return self.compute_lcs_matches(main_df, kd_tree, original_indices)
+    
+    # def run_lcs_analysis(self, db_new):
+        
+    #     """
+    #     The core function to run the LCS analysis on new POI data using the configured parameters.
+        
+    #     Args:
+    #         db_new (Database): Database connection to the new POI database.
+        
+    #     Returns:
+    #         pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
+    #         reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
+    #     """
+        
+    #     print_info("Starting LCS Analysis on new POI data under duplication check")
+    #     print_hashtags()
+        
+    #     query = f"SELECT {', '.join(self.poi_columns)} FROM {self.new_poi_table}"
+    #     df = db_new.select(query)
+    #     df = pd.DataFrame(df, columns=self.poi_columns) if df else None
+    #     if df is None or not isinstance(df, pd.DataFrame):
+    #         print_warning("Query did not return a DataFrame. Skipping LCS analysis.")
+    #         return
+    #     results_df = self.analyze_lcs_similarity(df)
+    #     matches = results_df[results_df['flagged']]
+    #     if not matches.empty:
+    #         print_info(f"Potential Matches found (Combined Similarity >= {self.lcs_config['threshold_lcs']}): {len(matches)}")
+    #         print_hashtags()
+    #     else:
+    #         print_info("  No potential matches found to display.")
+    #         print_hashtags()
+    #     return results_df
+
+    def get_lcs_similarity_sql(self):
+        """
+        Returns SQL snippet for LCS similarity, category similarity, and overall similarity using pg_trgm.
+        Uses columns and weights from YAML config (already loaded in __init__).
+        
         Args:
-            df (pd.DataFrame): DataFrame containing POI data with 'id', 'name', 'category', and 'geom' columns.
+            None
             
         Returns:
-            pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
-            reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
+            str: SQL snippet for calculating LCS similarity, category similarity, overall similarity, and ge
         """
-        
-        main_df = df[df['name'].notnull() & df['category'].notnull()]
-        if main_df.empty:
-            print_warning("No POI data found for LCS analysis. Check config.yaml and database connection.")
-            return pd.DataFrame()
-        kd_tree, coords_for_kd_tree, original_indices = self.build_kdtree(main_df)
-        if kd_tree is None:
-            return pd.DataFrame()
-        return self.compute_lcs_matches(main_df, kd_tree, original_indices)
+        id_col, name_col, category_col, geom_col = self.poi_columns
+        name_weight = self.name_weight
+        category_weight = self.category_weight
+        threshold_lcs = self.threshold_lcs
     
-    def run_lcs_analysis(self, db_new):
-        
+        string_similarity_query = f"""
+            similarity(ref.{name_col}, comp.{name_col}) AS name_lcs,
+            similarity(ref.{category_col}, comp.{category_col}) AS category_lcs,
+            ROUND(
+                ((similarity(ref.{name_col}, comp.{name_col}) * {name_weight}) +
+                (similarity(ref.{category_col}, comp.{category_col}) * {category_weight}))::numeric,
+                2
+            ) AS overall_lcs,
+            ROUND(ST_Distance(ref.{geom_col}::geography, comp.{geom_col}::geography)::numeric, 2) AS distance_m,
+            (ROUND(
+                ((similarity(ref.{name_col}, comp.{name_col}) * {name_weight}) +
+                (similarity(ref.{category_col}, comp.{category_col}) * {category_weight}))::numeric,
+                2
+            ) >= {threshold_lcs}) AS flagged
         """
-        The core function to run the LCS analysis on new POI data using the configured parameters.
+
+        return string_similarity_query
+
+    def run_lcs_analysis_sql(self, db_new):
+        """
+        Runs LCS analysis using pure SQL with pg_trgm and PostGIS, using columns from YAML config.
         
         Args:
-            db_new (Database): Database connection to the new POI database.
+        db_new (Database): Database connection to the new POI database.
         
-        Returns:
+        Returns:    
             pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
             reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
         """
-        
-        print_info("Starting LCS Analysis on new POI data under duplication check")
-        print_hashtags()
-        
-        query = f"SELECT {', '.join(self.poi_columns)} FROM {self.new_poi_table}"
-        df = db_new.select(query)
-        df = pd.DataFrame(df, columns=self.poi_columns) if df else None
-        if df is None or not isinstance(df, pd.DataFrame):
-            print_warning("Query did not return a DataFrame. Skipping LCS analysis.")
-            return
-        results_df = self.analyze_lcs_similarity(df)
-        matches = results_df[results_df['flagged']]
-        if not matches.empty:
-            print_info(f"Potential Matches found (Combined Similarity >= {self.lcs_config['threshold_lcs']}): {len(matches)}")
-            print_hashtags()
-        else:
-            print_info("  No potential matches found to display.")
-            print_hashtags()
-        return results_df
 
+        print_info(f"Performing LCS Analysis on '{self.new_poi_table}' using PSQL 'Similarity' and ST_Distance()")
+        print_hashtags()
+
+        id_col, name_col, category_col, geom_col = self.poi_columns
+        similarity_sql = self.get_lcs_similarity_sql()
+        table = self.new_poi_table
+        search_radius = self.proximity_radius_m
+        excluded_categories_clause = ", ".join([f"'{cat}'" for cat in self.excluded_categories])
+
+        query = f"""
+            SELECT
+                ref.{id_col} AS ref_id,
+                ref.{name_col} AS ref_name,
+                ref.{category_col} AS ref_category,
+                ST_AsText(ref.{geom_col}) AS ref_geom,
+                comp.{id_col} AS comp_id,
+                comp.{name_col} AS comp_name,
+                comp.{category_col} AS comp_category,
+                ST_AsText(comp.{geom_col}) AS comp_geom,
+                {similarity_sql}
+            FROM {table} ref
+            JOIN {table} comp
+                ON ref.{id_col} <> comp.{id_col}
+                AND ST_DWithin(
+                    ST_Transform(ref.{geom_col}, 3857),
+                    ST_Transform(comp.{geom_col}, 3857),
+                    {search_radius}
+                )
+            WHERE ref.{name_col} IS NOT NULL AND comp.{name_col} IS NOT NULL
+            AND ref.{category_col} IS NOT NULL AND comp.{category_col} IS NOT NULL
+            AND ref.{category_col} NOT IN ({excluded_categories_clause})
+            AND comp.{category_col} NOT IN ({excluded_categories_clause})
+        """
+    
+        print_info("Running SQL query for LCS analysis...")
+        df = db_new.select(query)
+        print_info(f"Query returned {len(df) if df else 0} rows.")
+        print_hashtags()
+
+        columns = [
+            "ref_id", "ref_name", "ref_category", "ref_geom",
+            "comp_id", "comp_name", "comp_category", "comp_geom",
+            "name_lcs", "category_lcs", "overall_lcs", "distance_m", "flagged"
+        ]
+        lcs_df = pd.DataFrame(df, columns=columns) if df else pd.DataFrame(columns=columns)
+
+        return lcs_df
+    
     def prepare_lcs_dataframe_for_export(self, df: pd.DataFrame) -> pd.DataFrame:
         
         """
@@ -856,7 +953,7 @@ class PoiValidation:
         # Do the aggregation of compared POIs based on each reference POI
         group_cols = ['ref_id', 'ref_name', 'ref_category', 'ref_geom']
         comp_cols = [col for col in df.columns if col.startswith('comp_')]
-        array_group_cols = ['geodesic_dist_m', 'name_lcs', 'category_lcs', 'overall_lcs', 'flagged']
+        array_group_cols = ['distance_m', 'name_lcs', 'category_lcs', 'overall_lcs', 'flagged']
         other_cols = [col for col in df.columns if col not in group_cols + comp_cols + array_group_cols]
 
         seen_comp_ids = set()
@@ -1036,7 +1133,7 @@ class PoiValidation:
             return
 
         # Only keep the required columns
-        cols = ['ref_id', 'ref_name', 'ref_category', 'comp_id', 'comp_name', 'comp_category', 'comp_geom', 'geodesic_dist_m', 'overall_lcs']
+        cols = ['ref_id', 'ref_name', 'ref_category', 'comp_id', 'comp_name', 'comp_category', 'comp_geom', 'distance_m', 'overall_lcs']
         df = df[cols]
 
         # Flatten the DataFrame: one row per (ref_id, comp_id) pair
@@ -1047,23 +1144,23 @@ class PoiValidation:
             ref_category = row['ref_category']
             comp_ids = row['comp_id'] if isinstance(row['comp_id'], list) else [row['comp_id']]
             comp_names = row['comp_name'] if isinstance(row['comp_name'], list) else [row['comp_name']]
-            geodesic_distances = row['geodesic_dist_m'] if isinstance(row['geodesic_dist_m'], list) else [row['geodesic_dist_m']]
+            distances = row['distance_m'] if isinstance(row['distance_m'], list) else [row['distance_m']]
             overall_lcs = row['overall_lcs'] if isinstance(row['overall_lcs'], list) else [row['overall_lcs']]
-            for cid, cname, dist, score in zip(comp_ids, comp_names, geodesic_distances, overall_lcs):
+            for cid, cname, dist, score in zip(comp_ids, comp_names, distances, overall_lcs):
                 rows.append({
                     "Reference ID": ref_id,
                     "Reference Name": ref_name,
                     "Category": ref_category,
                     "Duplicate ID": cid,
                     "Duplicate Name": cname,
-                    "Geodesic Distance (m)": dist,
+                    "Distance (m)": dist,
                     "Overall LCS": score
                 })
 
         flat_df = pd.DataFrame(rows)
 
         # Set column widths so headers do not wrap
-        headers = ["Reference ID", "Reference Name", "Category", "Duplicate ID", "Duplicate Name", "Geodesic Distance (m)", "Overall LCS"]
+        headers = ["Reference ID", "Reference Name", "Category", "Duplicate ID", "Duplicate Name", "Distance (m)", "Overall LCS"]
         col_widths = [max(len(str(val)) for val in [header] + flat_df[header].astype(str).tolist()) for header in headers]
 
         def format_row_md(row, widths):
@@ -1074,8 +1171,8 @@ class PoiValidation:
             f.write("This report lists all detected duplicate POIs based on Lowest Common Subsequence (LCS) similarity method.\n\n")
             f.write("**LCS Parameters Used:**\n\n")
             f.write("- **Attributes of Interest:** Name, Category, Geometry\n")
-            f.write("- **Proximity Radius (meters):** `30`\n")
-            f.write("- **Similarity Threshold (LCS):** `0.8`\n\n")
+            f.write(f"- **Proximity Radius (meters):** `{self.proximity_radius_m}`\n")
+            f.write(f"- **Similarity Threshold (LCS):** `{self.threshold_lcs}`\n\n")
             f.write("## Summary of Duplicates\n\n")
             # Write header
             f.write(format_row_md(headers, col_widths))
@@ -1112,17 +1209,26 @@ def validate_poi(region: str):
             print_hashtags()
             # process_poi_validation(validator, "poi", region, current_metric, temp_geom_clone_table, db_old, db_new)
             
-    lcs_results_df = validator.run_lcs_analysis(db_new)
-    processed_lcs_df = validator.prepare_lcs_dataframe_for_export(lcs_results_df)
+    # lcs_results_df = validator.run_lcs_analysis(db_new)
+    # processed_lcs_df = validator.prepare_lcs_dataframe_for_export(lcs_results_df)
     
+    # lcs_gpkg_output_path = os.path.join(validator.data_dir, "poi", f"poi_validation_lcs_{region}.gpkg")
+    # lcs_md_output_path = os.path.join(validator.data_dir, "poi", f"poi_validation_lcs_{region}.md")
+
+    # validator.generate_lcs_based_gpkg_file(processed_lcs_df, lcs_gpkg_output_path)    
+    # validator.generate_lcs_based_markdown_report(processed_lcs_df, lcs_md_output_path)
+    
+    # validator.drop_temp_geom_reference_table(db_new, temp_geom_clone_table)
+
+    lcs_results_df = validator.run_lcs_analysis_sql(db_new)
+    processed_lcs_df = validator.prepare_lcs_dataframe_for_export(lcs_results_df)
+
     lcs_gpkg_output_path = os.path.join(validator.data_dir, "poi", f"poi_validation_lcs_{region}.gpkg")
     lcs_md_output_path = os.path.join(validator.data_dir, "poi", f"poi_validation_lcs_{region}.md")
 
     validator.generate_lcs_based_gpkg_file(processed_lcs_df, lcs_gpkg_output_path)    
     validator.generate_lcs_based_markdown_report(processed_lcs_df, lcs_md_output_path)
-    
-    validator.drop_temp_geom_reference_table(db_new, temp_geom_clone_table)
-    
+
     db_old.close()
     db_new.close()
 
