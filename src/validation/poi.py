@@ -36,10 +36,7 @@ class PoiValidation:
         self.new_poi_table = self.config.validation["new_poi_table"]
         
         self.all_metrics = list(self.config.validation["metrics"].keys())
-
-        self.geom_reference_query = self.config.validation["metrics"][self.all_metrics[0]]["geom_reference_query"]
-        self.reference_geom_table = self.geom_reference_query.split("FROM", 1)[1].strip().split()[0]
-
+        
         self.lcs_config = self.config.validation['lcs']
         self.poi_columns = self.lcs_config['poi_columns']
         self.excluded_categories = self.lcs_config['excluded_categories']
@@ -47,7 +44,37 @@ class PoiValidation:
         self.name_weight = self.lcs_config['weights']['name']
         self.category_weight = self.lcs_config['weights']['category']
         self.threshold_lcs = self.lcs_config['threshold_lcs']
+ 
+    
+    def get_geom_reference_table_and_query(self, metric_name):
+        """
+        Get the geometry reference query for a specific metric.
         
+        Args:
+            metric_name (str): The name of the metric for which to get the geometry reference query.
+        
+        Returns:
+            str: The geometry reference query for the specified metric.
+        """
+        if metric_name == "poi_count":
+            geom_reference_query = self.config.validation["metrics"][metric_name]["geom_reference_query"]
+            temp_ref_clone_name = geom_reference_query.split("FROM", 1)[1].strip().split()[0]
+            return geom_reference_query, temp_ref_clone_name
+        elif metric_name == "poi_density":
+            geom_reference_query = self.config.validation["metrics"][metric_name]["geom_reference_query"]
+            temp_ref_clone_name = geom_reference_query.split("FROM", 1)[1].strip().split()[0]
+            return geom_reference_query, temp_ref_clone_name
+        elif metric_name == "poi_per_people":
+            geom_reference_query = self.config.validation["metrics"][metric_name]["geom_reference_query"]
+            temp_ref_clone_name = geom_reference_query.split("FROM", 1)[1].strip().split()[0]
+            return geom_reference_query, temp_ref_clone_name
+        elif metric_name == "population_per_poi":
+            geom_reference_query = self.config.validation["metrics"][metric_name]["geom_reference_query"]
+            temp_ref_clone_name = geom_reference_query.split("FROM", 1)[1].strip().split()[0]
+            return geom_reference_query, temp_ref_clone_name
+        else:
+            raise ValueError(f"Unknown metric: {metric_name}")
+       
     def get_metric_clause(self, metric_name):
         """
         Get the SQL clause for a specific metric.
@@ -59,21 +86,22 @@ class PoiValidation:
             str: The SQL clause for the specified metric.
         """
         if metric_name == "poi_count":
-            return "COUNT(*) AS poi_count"
+            return f"COUNT(*) AS poi_count"
         elif metric_name == "poi_density":
-            return """
+            return f"""
                 ROUND(CAST(COUNT(poi.category) AS NUMERIC) / (ST_Area(ST_Transform(ref.geom, 3857))::NUMERIC / 10000.0::NUMERIC), 5)::NUMERIC AS poi_density
             """
-        elif metric_name == "poi_per_capita":
-            return """
+        elif metric_name == "poi_per_people":
+            people_count = self.config.validation["metrics"][metric_name].get("capita_people_count", "N/A")
+            return f"""
                 CASE
                     WHEN ref.einwohnerzahl_ewz > 0 THEN
-                        ROUND((CAST(COUNT(*) AS NUMERIC) / ref.einwohnerzahl_ewz::NUMERIC) * 1000.0::NUMERIC, 2)::NUMERIC
+                        ROUND((CAST(COUNT(*) AS NUMERIC) / ref.einwohnerzahl_ewz::NUMERIC) * {people_count}::NUMERIC, 2)::NUMERIC
                     ELSE 0::NUMERIC
-                END AS poi_per_capita
+                END AS poi_per_people
             """
         elif metric_name == "population_per_poi":
-            return """
+            return f"""
                 CASE
                     WHEN COUNT(*) > 0 THEN
                         (FLOOR(ref.einwohnerzahl_ewz::NUMERIC / CAST(COUNT(*) AS NUMERIC))::NUMERIC)::INT
@@ -84,7 +112,7 @@ class PoiValidation:
             raise ValueError(f"Unknown metric: {metric_name}")
 
 
-    def create_temp_geom_reference_table(self, db_old: Database, db_new: Database, temp_reference_clone: str=None):
+    def create_temp_geom_reference_table(self, db_old: Database, db_new: Database, geom_reference_query, temp_ref_clone_name):
         """
         Copy the geometry reference table from raw database to local database using ogr2ogr.
 
@@ -92,19 +120,16 @@ class PoiValidation:
             db_old (Database): Database connection to the old database.
             db_new (Database): Database connection to the new database.
             metric (str, optional): The metric to use for validation. Defaults to None.
-            temp_reference_clone (str, optional): Name for the temporary reference table. Defaults to None.
+            temp_ref_clone_name (str, optional): Name for the temporary reference table. Defaults to None.
 
         Returns:
             str: The name of the temporary geometry reference table created in the new database.
         """
 
         # Extract the reference geomtry table name from the yaml definition inside validation object
-        print_info(f"Creating clone of '{self.reference_geom_table}' in new database")
+        print_info(f"Creating clone of '{temp_ref_clone_name}' in new database")
         print_hashtags()
         
-        # Copy the reference table name using the geometry reference query to the temp_reference_clone variable 
-        if temp_reference_clone is None:
-            temp_reference_clone = "public." + self.reference_geom_table.split(".", 1)[1]
         # Extract the new and old db credentials to parse to ogr2ogr command
         local_host = settings.LOCAL_DATABASE_URI.host
         local_db = settings.LOCAL_DATABASE_URI.path.replace("/", "")
@@ -124,7 +149,7 @@ class PoiValidation:
             f"ogr2ogr -f 'PostgreSQL' "
             f"PG:'host={local_host} dbname={local_db} user={local_user} password={local_password} port={local_port}' "
             f"PG:'host={raw_host} dbname={raw_db} user={raw_user} password={raw_password} port={raw_port}' "
-            f"-nln {temp_reference_clone} -sql \"{self.geom_reference_query}\""
+            f"-nln {temp_ref_clone_name} -sql \"{geom_reference_query}\""
         )
     
         try:
@@ -133,25 +158,25 @@ class PoiValidation:
             print_error(f"Reference geometry data table copy failed: {e}")
     
         # It returns the name of the temporary reference geometry reference table    
-        return temp_reference_clone
+        return temp_ref_clone_name
     
-    def drop_temp_geom_reference_table(self, db: Database, temp_reference_clone: str):
+    def drop_temp_geom_reference_table(self, db: Database, temp_ref_clone_name: str):
         """
         Drop the temporary reference geometry reference table from the database.
 
         Args:
             db (Database): Database connection to the database.
-            temp_reference_clone (str): Name of the temporary reference geometry table to drop.
+            temp_ref_clone_name (str): Name of the temporary reference geometry table to drop.
         """
 
-        print_info(f"Dropping temporary reference geometry table '{temp_reference_clone}'")
+        print_info(f"Dropping temporary reference geometry table '{temp_ref_clone_name}'")
         print_hashtags()
         
         # Execute the drop table query
-        drop_query = f"DROP TABLE IF EXISTS {temp_reference_clone};"
+        drop_query = f"DROP TABLE IF EXISTS {temp_ref_clone_name};"
         db.perform(drop_query)
     
-    def convert_geometry_query_columns_to_dict(self):
+    def generate_group_by_clause(self, geom_reference_query):
         """
         This function extracts the column names from the reference geometry query and creates a mapping dictionary for running queries on new and old database.
 
@@ -168,32 +193,20 @@ class PoiValidation:
         """
 
         # Extract the columns part from the reference geometry query and split it into individual columns
-        columns_part = self.geom_reference_query.split("SELECT")[1].split("FROM")[0].strip()
-        columns = [col.strip() for col in columns_part.split(",")]
+        columns_part = geom_reference_query.split("SELECT")[1].split("FROM")[0].strip()
+        group_by_list = [f"ref.{col.strip()}" for col in columns_part.split(",")]
+        group_by_clause = ", ".join(group_by_list)
 
-        # Build dictionary: {alias for new query: original_column for old query}
-        new_and_old_columns_mapping = {}
-        for col in columns:
-            if " AS " in col:
-                original, alias = [x.strip() for x in col.split(" AS ")]
-                new_and_old_columns_mapping[alias] = original
-            else:
-                new_and_old_columns_mapping[col] = col
+        return group_by_clause
 
-        # Generate group by clauses for new and old queries otherwise it will not work
-        new_group_by_clause = ", ".join(f"ref.{k}" for k in new_and_old_columns_mapping.keys())
-        old_group_by_clause = ", ".join(f"ref.{v}" for v in new_and_old_columns_mapping.values())
-        
-        return new_and_old_columns_mapping, new_group_by_clause, old_group_by_clause
-        
-    def perform_spatial_intersection(self, db, poi_table, temp_reference_clone, group_by_clause, metric_clause):
+    def perform_spatial_intersection(self, db, poi_table, temp_ref_clone_name, group_by_clause, metric_clause):
         """
         Perform a spatial intersection between the POI table and the temporary reference clone.
         
         Args:
             db (Database): Database connection to the database.
             poi_table (str): Name of the POI table to join with the reference geometry table.
-            temp_reference_clone (str): Name of the temporary reference geometry table.
+            temp_ref_clone_name (str): Name of the temporary reference geometry table.
             group_by_clause (str): Group by clause for the query.
             metric_clause (str): Metric clause for the query.
         
@@ -201,13 +214,13 @@ class PoiValidation:
             list: Results of the spatial join as a list of dictionaries.
         """
         
-        print_info(f"Spatially joining '{poi_table}' <-> '{temp_reference_clone}'")
+        print_info(f"Spatially joining '{poi_table}' <-> '{temp_ref_clone_name}'")
         print_hashtags()
         
         spatial_join_condition = "ST_Within(poi.geom, ref.geom)"
         spatial_join_query = f"""
             SELECT {group_by_clause}, poi.category, {metric_clause}
-            FROM {temp_reference_clone} AS ref
+            FROM {temp_ref_clone_name} AS ref
             CROSS JOIN LATERAL (
                 SELECT category, geom
                 FROM {poi_table} AS poi
@@ -217,66 +230,74 @@ class PoiValidation:
             GROUP BY {group_by_clause}, poi.category
             ORDER BY poi.category;
         """
+        
         spatial_join_results = db.select(spatial_join_query)
         return spatial_join_results
 
-    def run_core_validation_functions(self, db_old, db_new, temp_geom_clone_table, metric):
-        
+    def run_metric_based_validation(self, db_old, db_new, temp_geom_clone_table, metric):
         """
         Run the core validation functions to create merged results for new and old POI tables.
-        
+
         Args:
             db_old (Database): Database connection to the old database.
             db_new (Database): Database connection to the new database.
             temp_geom_clone_table (str): Name of the temporary geometry reference table.
             metric (str): The metric to use for validation.
-        
+
         Returns:
             dict: A dictionary containing the spatial join results for new and old POI tables.
         """
-        
+
         print_info(f"Creating merged results for new and old POI tables")
         print_hashtags()
-        
+
         spatial_join_results = {
             "new": {},
             "old": {}
         }
-        
-        # Generate the field mapping for group by clauses and metric clauses
-        new_and_old_columns_mapping, new_group_by_clause, old_group_by_clause = self.convert_geometry_query_columns_to_dict()
+
+        geom_reference_query, _ = self.get_geom_reference_table_and_query(metric)
+
+        # Generate the group by clause
+        group_by_clause = self.generate_group_by_clause(geom_reference_query)
+
         # Append a prefix to the metric key for new and old results
         new_metric_key = f"new_{metric}"
         old_metric_key = f"old_{metric}"
-        
-        # Prepare the keys for new and old results using the keys and values of new_and_old_columns_mapping
-        new_keys = [f"new_{k}" for k in new_and_old_columns_mapping.keys()] + ["new_category", new_metric_key]
-        old_keys = [f"old_{v}" for v in new_and_old_columns_mapping.values()] + ["old_category", old_metric_key]
+
         metric_clause = self.get_metric_clause(metric)
-        
+
+        # Extract column names from the geom_reference_query
+        columns_part = geom_reference_query.split("SELECT")[1].split("FROM")[0].strip()
+        column_names = [col.strip() for col in columns_part.split(",")]
+
+        # Prepare the keys for new and old results
+        new_keys = [f"new_{col}" for col in column_names] + ["new_category", new_metric_key]
+        old_keys = [f"old_{col}" for col in column_names] + ["old_category", old_metric_key]
+
         # Perform the spatial intersection for the new POI table and temporary reference clone table
         new_results_old = self.perform_spatial_intersection(
-            db_new, self.new_poi_table, temp_geom_clone_table, new_group_by_clause, metric_clause
+            db_new, self.new_poi_table, temp_geom_clone_table, group_by_clause, metric_clause
         )
         new_results = [
             dict(zip(new_keys, row))
             for row in new_results_old
         ]
-        
+
         # Append the results to the dictionary of spatial joins
         spatial_join_results["new"][self.new_poi_table] = new_results
-        
+
         # Do the same for each old POI table with temporary reference clone table
         for old_poi_table in self.old_poi_tables:
             old_results_old = self.perform_spatial_intersection(
-                db_old, old_poi_table, temp_geom_clone_table, old_group_by_clause, metric_clause
+                db_old, old_poi_table, temp_geom_clone_table, group_by_clause, metric_clause
             )
             old_results = [
                 dict(zip(old_keys, row))
                 for row in old_results_old
             ]
             spatial_join_results["old"][old_poi_table] = old_results
-        
+
         return spatial_join_results
 
     # Helper to handle exponential notation and format floats to 5 decimal places
@@ -285,7 +306,7 @@ class PoiValidation:
             return float(f"{val:.5f}".rstrip('0').rstrip('.') if '.' in f"{val:.5f}" else f"{val:.5f}")
         return val
 
-    def compare_new_and_old_results(self, spatial_join_results, metric):
+    def compare_metric_based_new_and_old_results(self, spatial_join_results, metric):
         """
         Compare the new and old results based on matching id, name, geom, and category.
         
@@ -297,29 +318,36 @@ class PoiValidation:
             dict: A dictionary containing the unified results of the comparison.
         """
         
-        print_info(f"Filtering pois based on matching id, name, geom, and category")
+        print_info(f"Filtering pois based on matching reference geometry table fields")
         print_hashtags()
         
         # Prepare a dictionary to hold the final dataframe for export as GPKG and MD
         unified_results = {}
         # Get the new results (should be a list of dicts) from the spatial join results
         new_pois = spatial_join_results["new"].get(self.new_poi_table, [])
-        # Dynamically get the column keys from the key mapping dictionary for new and old tables
-        new_and_old_columns_mapping, _, _ = self.convert_geometry_query_columns_to_dict()
-        new_keys_prefix = [f"new_{k}" for k in new_and_old_columns_mapping.keys()]
+        
+        # Extract column names from the geom_reference_query
+        geom_reference_query, _ = self.get_geom_reference_table_and_query(metric)
+        columns_part = geom_reference_query.split("SELECT")[1].split("FROM")[0].strip()
+        column_names = [col.strip() for col in columns_part.split(",")]
+
+        # Prepare the keys for new and old results
+        new_keys_prefix = [f"new_{col}" for col in column_names]
+        old_keys_prefix = [f"old_{col}" for col in column_names]
+
         # Category is a special case, so we add it separately since it is not in the mapping and reference query
         new_category_key = "new_category"
         new_metric_key = f"new_{metric}"
+        old_category_key = "old_category"
+        old_metric_key = f"old_{metric}"
+
         # Build a lookup for new pois: (id, name, geom, category) -> record
         new_lookup = {}
         for rec in new_pois:
             # Build the key tuple dynamically (all mapped keys + category)
             key = tuple(rec.get(k) for k in new_keys_prefix) + (rec.get(new_category_key),)
             new_lookup[key] = rec
-        # Define the old keys based on the mapping dictionary to be matched with the new keys for filtering
-        old_keys_prefix = [f"old_{v}" for v in new_and_old_columns_mapping.values()]
-        old_category_key = "old_category"
-        old_metric_key = f"old_{metric}"
+
         # This loop runs over the old results and then matches them with the new pois
         for old_table, old_pois in spatial_join_results["old"].items():
             comparison_list = []
@@ -334,11 +362,14 @@ class PoiValidation:
                     try:
                         # Calculate percentage difference: ((new - old) / old) * 100
                         if float(old_val) != 0:
-                            difference = round(((float(new_val) - float(old_val)) / float(old_val)) * 100, 2)
+                            difference = int(new_val) - int(old_val)
+                            perc_diff = round(((float(new_val) - float(old_val)) / float(old_val)) * 100, 2)
                         else:
                             difference = None
+                            perc_diff = None
                     except Exception:
                         difference = None 
+                        perc_diff = None
                     
                     # Prepare the output that contains the comparison results and filters out duplicate column names either from new or old columns
                     #  id, name, category, geom come from either new or old pois
@@ -351,7 +382,8 @@ class PoiValidation:
                         "category": new_rec.get(new_category_key),
                         new_metric_key: self.format_float(new_val), # Use dynamic metric key
                         old_metric_key: self.format_float(old_val), # Use dynamic metric key
-                        "perc_diff": difference,
+                        "difference": self.format_float(difference),
+                        "perc_diff": self.format_float(perc_diff),
                         "geom": new_rec.get(geom_key),
                     }
                     comparison_list.append(output)
@@ -405,6 +437,9 @@ class PoiValidation:
 
             df["geometry"] = df[geom_key].apply(parse_geom)
 
+            # Sort the DataFrame by category (ascending) and perc_diff (descending)
+            df = df.sort_values(by=[category_key, "perc_diff"], ascending=[True, False])
+
             # Export each category as a separate layer inside the GPKG file
             for category, group in df.groupby(category_key):
                 table_name = old_table.split(".", 1)[1]
@@ -412,7 +447,7 @@ class PoiValidation:
                 gdf = gpd.GeoDataFrame(group.drop(columns=[geom_key]), geometry="geometry", crs="EPSG:4326")
                 gdf.to_file(output_path, layer=layer_name, driver="GPKG")
 
-    def generate_metrics_based_markdown_report(self, pois, output_path, region, metric):
+    def generate_metrics_based_markdown_report(self, pois, output_path, region, metric, temp_ref_clone_name):
         
         """
         Generate a Markdown report summarizing the validation results.
@@ -434,32 +469,30 @@ class PoiValidation:
         
         # Units description based on metric
         units = "Number of Features"
-        if metric == "density":
-            units = "Features per 100 sq meters"
-        elif "capita" in metric:
-            people_count = metric_config.get("capita_count", "N/A")
-            if metric == "poi_per_capita":
-                units = "POIs per 1,000 people"
-            elif metric == "population_per_poi":
-                units = "People per POI"
+        people_count = metric_config.get("capita_people_count", "N/A")
+        if metric == "poi_per_people":
+            units = f"POIs per {people_count} people"
+        elif metric == "population_per_poi":
+            units = "People per POI"
 
 
         # A function definition to format rows for Markdown tables
         def format_row(row, widths):
             """Format a row for Markdown with padded column widths."""
-            return "| " + " | ".join(str(val).ljust(width) for val, width in zip(row, widths)) + " |\n"
+            escaped_row = [str(val).replace("_", "\_") for val in row]
+            return "| " + " | ".join(str(val).ljust(width) for val, width in zip(escaped_row, widths)) + " |\n"
 
         # Create the Markdown file and write the header
         with open(output_path, 'w') as f:
-            f.write(
-                """<style>
-                @import url('https://fonts.googleapis.com/css2?family=Inter&display=swap');
-                body {
-                    font-family: 'Inter', sans-serif;
-                }
-                </style>\n\n"""
-            )
-            f.write(f"# Validation Report - **{metric.upper()}** Metric\n\n")
+            # f.write(
+            #     """<style>
+            #     @import url('https://fonts.googleapis.com/css2?family=Barlow&display=swap');
+            #     body {
+            #         font-family: 'Barlow', sans-serif;
+            #     }
+            #     </style>\n\n"""
+            # )
+            f.write(f"# Validation Report - **{metric.replace('_', ' ').upper()}** Metric\n\n")
 
             for old_table, recs in pois.items():
                 if not recs:
@@ -467,22 +500,31 @@ class PoiValidation:
 
                 # Section Header Info
                 f.write(f"### 📄 Table Details\n\n")
-                f.write(f"- **Reference Geometry Table:** `{self.reference_geom_table}`\n")
+                f.write(f"- **Reference Geometry Table:** `{temp_ref_clone_name}`\n")
                 f.write(f"- **Raw Database Table:** `{old_table}`\n")
                 f.write(f"- **Local Database Table:** `{new_table}`\n")
                 f.write(f"- **Region:** `{region}`\n")
-                f.write(f"- **Metric:** `{metric}`\n")
+                # f.write(f"- **Metric:** `{metric}`\n")
                 f.write(f"- **Units:** `{units}`\n\n")
 
                 # 🚨 Threshold Violations Table
                 f.write("## 🚨 Threshold Violations\n\n")
 
                 headers = [
-                    "Category", "County", f"Old {metric.capitalize()}", f"New {metric.capitalize()}", # Dynamic headers
-                    "Difference (%)", "Threshold (%)", "Region ID"
+                    "Category", 
+                    "Admin Name", 
+                    f"Old {metric.replace('_', ' ').title()}", 
+                    f"New {metric.replace('_', ' ').title()}",
+                    "Difference",
+                    "Difference (%)", 
+                    "Threshold (%)", 
+                    "Region ID"
                 ]
                 violations = []
                 summary_stats = {}
+
+                # Sort recs by category (ascending) and perc_diff (descending)
+                recs = sorted(recs, key=lambda r: (str(r.get("category", "")).lower(), -(r.get("perc_diff") if r.get("perc_diff") is not None else float('-inf'))))
 
                 for rec in recs:
                     category = str(rec["category"]).capitalize()
@@ -491,18 +533,20 @@ class PoiValidation:
                     old_val = float(rec.get(f"old_{metric}", 0)) # Dynamic access
                     # Access new_count or new_density based on 'metric'
                     new_val = float(rec.get(f"new_{metric}", 0)) # Dynamic access
-                    diff = rec.get("perc_diff", 0)
+                    difference = float(rec.get("difference", 0))
+                    perc_diff = float(rec.get("perc_diff", 0))
                     threshold = thresholds.get(str(rec["category"]).lower(), thresholds.get("default", 0))
                     region_id = rec.get("id", "")
 
                     # Check if the difference exceeds the relevant threshold then append the record to violations
-                    is_violation = diff is not None and threshold is not None and abs(diff) > float(threshold)
+                    is_violation = perc_diff is not None and threshold is not None and abs(perc_diff) > float(threshold)
                     if is_violation:
                         violations.append([
                             category, county, 
                             self.format_float(old_val),
                             self.format_float(new_val),
-                            self.format_float(diff),
+                            self.format_float(difference),
+                            self.format_float(perc_diff),
                             self.format_float(threshold),
                             region_id
                         ])
@@ -516,8 +560,8 @@ class PoiValidation:
                         summary_stats[cat_key]["violations"] += 1
                     summary_stats[cat_key]["old_total"] += old_val
                     summary_stats[cat_key]["new_total"] += new_val
-                    if diff is not None:
-                        summary_stats[cat_key]["diffs"].append(abs(diff))
+                    if perc_diff is not None:
+                        summary_stats[cat_key]["diffs"].append(abs(perc_diff))
 
                 # This snippet renders the violations table
                 all_rows = [headers] + violations if violations else [headers]
@@ -532,11 +576,13 @@ class PoiValidation:
                 f.write("## 📊 Summary Statistics\n\n")
                 stats_headers = ["Statistic", "Value"]
                 stats_rows = [
-                    ["Regions Analyzed", len(set(rec.get("id") for rec in recs))],
+                    ["Admin Units Analyzed", len(set(rec.get("id") for rec in recs))],
                     ["Categories Analyzed", len(set(rec.get("category") for rec in recs))],
-                    ["Violations Found", len(violations)],
+                    ["Combinations of Admin Units and Categories", len(recs)],
+                    ["Combinations Surpassing the Violation Threshold", len(violations)],
                     ["Violation Rate", f"{(len(violations) / len(recs) * 100):.2f}%" if recs else "0.00%"]
                 ]
+                
                 stats_col_widths = [max(len(str(row[i])) for row in [stats_headers] + stats_rows) for i in range(2)]
                 f.write(format_row(stats_headers, stats_col_widths))
                 f.write("|" + "|".join("-" * (w + 2) for w in stats_col_widths) + "|\n")
@@ -544,10 +590,29 @@ class PoiValidation:
                     f.write(format_row(row, stats_col_widths))
                 f.write("\n")
 
+                # Add a disclaimer about possible combinations
+                f.write("> <span style='color: red;'>⚠️ **Disclaimer:**</span> The possible combinations of administrative units and categories represent all theoretical pairs (admin units × categories). However, not every administrative unit contains every category, so the actual number of analyzed combinations may be lower than the maximum possible. \n\n")
+
+                temp_clone = temp_ref_clone_name.replace("_", "\\_")
+                old_table = old_table.replace("_", "\\_")
+                # Add a Markdown paragraph describing the summary statistics
+                f.write(
+                    f"**Dataset Length**: _The total count of spatial join results between {temp_clone} <-> {old_table}._  \n"
+                    f"**Admin Units Analyzed**: _The number of unique administrative regions considered in the analysis._  \n"
+                    f"**Categories Analyzed**: _The number of different POI categories that were analyzed within each administrative unit._  \n"
+                    f"**Violations Found**: _The total number of category-specific violations exceeding the defined threshold within each administrative unit._  \n"
+                    f"**Violation Rate**: _The percentage of category-specific violations exceeding the defined threshold, relative to the total categories analyzed within each administrative unit._  \n\n"
+                )
+
                 # 📋 Violation Breakdown by Category Section
-                f.write("## 📋 Violation Breakdown by Category\n\n")
+                f.write("## 📋 Violation Breakdown by Category \n\n")
                 breakdown_headers = [
-                    "Category", "Violations", f"Old Total ({metric.capitalize()})", f"New Total ({metric.capitalize()})", "Avg Diff (%)", "Max Diff (%)" # Dynamic headers
+                    "Category", 
+                    "Violations", 
+                    f"Old Total ({metric.replace('_', ' ').title()})", 
+                    f"New Total ({metric.replace('_', ' ').title()})", 
+                    "Avg Diff (%)", 
+                    "Max Diff (%)"
                 ]
                 breakdown_rows = []
                 for cat, stats in summary_stats.items():
@@ -574,266 +639,6 @@ class PoiValidation:
     # ************************************************************************************** #
     # ********************** LOWEST COMMON SUBSEQUENCE (LCS) ANALYSIS ********************** #
     # ************************************************************************************** #
-
-    # def normalize_string(self, s: str) -> str:
-    #     """
-    #     Normalize a string by converting it to lowercase and stripping whitespace.
-
-    #     Args:
-    #         s (str): The string to normalize.
-        
-    #     Returns:
-    #         str: The normalized string.
-    #     """
-        
-    #     if s is None:
-    #         return ""
-    #     return str(s).lower().strip()
-
-    # def calculate_string_similarity_ratio(self, s1: str, s2: str) -> float:
-        
-    #     """
-    #     Calculate the similarity ratio between two strings using the Levenshtein distance.
-        
-    #     Args:
-    #         s1 (str): The first string.
-    #         s2 (str): The second string.
-            
-    #     Returns:
-    #         float: The similarity ratio between the two strings, ranging from 0.0 to 1.0.
-    #         1.0 means identical, 0.0 means completely different.
-    #     """
-        
-    #     s1_norm = self.normalize_string(s1)
-    #     s2_norm = self.normalize_string(s2)
-    #     if not s1_norm and not s2_norm:
-    #         return 1.0
-    #     if not s1_norm or not s2_norm:
-    #         return 0.0
-        
-    #     ratio = difflib.SequenceMatcher(None, s1_norm, s2_norm).ratio()
-        
-    #     return ratio
-
-    # def parse_wkt_point(self, geom_str: str) -> Optional[Tuple[float, float]]:
-        
-    #     """
-    #     Parse a WKT or WKB geometry string and return the coordinates of a Point geometry.
-        
-    #     Args:
-    #         geom_str (str): The geometry string in WKT or WKB format.
-    #     If the string is not a valid geometry, it returns None.
-    #     Returns:
-    #         Optional[Tuple[float, float]]: A tuple containing the latitude and longitude of the point,
-    #         or None if the geometry is not a valid Point.
-    #     """
-        
-    #     if not isinstance(geom_str, str):
-    #         return None
-    #     # Try WKT first
-    #     try:
-    #         geom = wkt.loads(geom_str)
-    #         if geom.geom_type == "Point":
-    #             return (geom.y, geom.x)
-    #     except Exception:
-    #         pass
-    #     # Try WKB hex
-    #     try:
-    #         geom = wkb.loads(geom_str, hex=True)
-    #         if geom.geom_type == "Point":
-    #             return (geom.y, geom.x)
-    #     except Exception:
-    #         pass
-    #     print_warning(f"Could not parse geometry point: '{geom_str}'")
-    #     return None
-
-    # def euclidean_distance(self, coord1, coord2):
-        
-    #     """
-    #     Calculate the Euclidean distance between two points in meters.
-
-    #     Args:
-    #         coord1 (Tuple[float, float]): The (latitude, longitude) of the first point.
-    #         coord2 (Tuple[float, float]): The (latitude, longitude) of the second point.
-
-    #     Returns:
-    #         float: The distance between the two points in meters.
-    #     """
-        
-    #     R = 6371000  # Earth radius in meters
-    #     lat1, lon1 = radians(coord1[0]), radians(coord1[1])
-    #     lat2, lon2 = radians(coord2[0]), radians(coord2[1])
-    #     dlon = lon2 - lon1
-    #     dlat = lat2 - lat1
-    #     a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    #     c = 2 * atan2(sqrt(a), sqrt(1-a))
-    #     distance = R * c
-    #     return distance
-
-    # def build_kdtree(self, main_df):
-        
-    #     """
-    #     Build a KDTree for efficient spatial queries.
-        
-    #     Args:
-    #         main_df (pd.DataFrame): The DataFrame containing POI data with 'geom' column.
-            
-    #     Returns:
-    #         tuple: A tuple containing:
-    #             - kd_tree (KDTree): The KDTree built from the coordinates of the POIs.
-    #             - coords_for_kd_tree (List[Tuple[float, float]]): List of coordinates used to build the KDTree.
-    #             - original_indices (List[int]): List of original indices from the main DataFrame corresponding to the coordinates.
-    #     """
-        
-    #     print_info("Building KDTree for POI geometries")
-    #     print_hashtags()
-        
-    #     coords_for_kd_tree = []
-    #     original_indices = []
-    #     for idx, row in main_df[['geom']].dropna().iterrows():
-    #         coords = self.parse_wkt_point(row['geom'])
-    #         if coords:
-    #             coords_for_kd_tree.append(coords)
-    #             original_indices.append(idx)
-    #         else:
-    #             print_warning(f"Skipping POI (index: {idx}) due to unparsable geometry for KDTree.")
-    #     if not coords_for_kd_tree:
-    #         print_error("No valid POI geometries found for KDTree construction. LCS analysis cannot proceed.")
-    #         return None, None, None
-    #     kd_tree = KDTree(coords_for_kd_tree)
-    #     print_info(f"KDTree built for {len(coords_for_kd_tree)} POIs")
-    #     print_hashtags()
-    #     return kd_tree, coords_for_kd_tree, original_indices
-
-
-    # def compute_lcs_matches(self, main_df, kd_tree, original_indices):
-        
-    #     """
-    #     Compute LCS (Longest Common Subsequence) matches between POIs.
-        
-    #     Args:
-    #         main_df (pd.DataFrame): The DataFrame containing POI data with 'id', 'name', 'category', and 'geom' columns.
-    #         kd_tree (KDTree): The KDTree built from the coordinates of the POIs.
-    #         original_indices (List[int]): List of original indices from the main DataFrame corresponding to the coordinates.
-        
-    #     Returns:
-    #         pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
-    #         reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
-    #     """
-        
-    #     print_info(f"Starting LCS similarity analysis for {len(main_df)} POIs")
-    #     print_hashtags()
-        
-    #     results_list = []
-    #     # This loop iterates over each reference POI and finds potential matches within the KDTree
-    #     for index, ref in main_df.iterrows():
-    #         # Extract reference POI details
-    #         ref_id = ref.get('id')
-    #         ref_name = ref.get('name')
-    #         ref_category = ref.get('category')
-    #         ref_geom = ref.get('geom')
-    #         ref_coords = self.parse_wkt_point(ref_geom)
-    #         if pd.isna(ref_name) or pd.isna(ref_category) or ref_coords is None:
-    #             continue
-
-    #         # Convert meters to degrees (approximate, since 1 degree ≈ 111 km at the equator)
-    #         # This function finds all indices in the KDTree that are within the proximity radius
-    #         indices_in_approx_range = kd_tree.query_ball_point(
-    #             ref_coords, r=self.proximity_radius_m / 111000.0
-    #         )
-    #         # Loop over each comparison POI found in the KDTree to get the relevant values below
-    #         for idx_kd_tree in indices_in_approx_range:
-    #             original_idx = original_indices[idx_kd_tree]
-    #             comp = main_df.loc[original_idx]
-    #             comp_id = comp.get('id')
-    #             comp_name = comp.get('name')
-    #             comp_category = comp.get('category')
-    #             comp_geom = comp.get('geom')
-    #             comp_coords = self.parse_wkt_point(comp_geom)
-    #             if ref_id == comp_id:
-    #                 continue
-    #             if pd.isna(comp_name) or pd.isna(comp_category) or comp_coords is None:
-    #                 continue
-    #             geodesic_dist_m = round(self.euclidean_distance(ref_coords, comp_coords), 2)
-    #             name_lcs = round(self.calculate_string_similarity_ratio(ref_name, comp_name), 2)
-    #             category_lcs = round(self.calculate_string_similarity_ratio(ref_category, comp_category), 2)
-    #             overall_lcs = round((name_lcs * self.name_weight) + (category_lcs * self.category_weight), 2)
-    #             flagged = overall_lcs >= self.threshold_lcs
-                
-    #             # Append the results to the results_list
-    #             results_list.append({
-    #                 'ref_id': ref_id,
-    #                 'ref_name': ref_name,
-    #                 'ref_category': ref_category,
-    #                 'ref_geom': ref_geom,
-    #                 'comp_id': comp_id,
-    #                 'comp_name': comp_name,
-    #                 'comp_category': comp_category,
-    #                 'comp_geom': comp_geom,
-    #                 'geodesic_dist_m': geodesic_dist_m,
-    #                 'name_lcs': name_lcs,
-    #                 'category_lcs': category_lcs,
-    #                 'overall_lcs': overall_lcs,
-    #                 'threshold_lcs': round(self.threshold_lcs, 2),
-    #                 'flagged': flagged
-    #             })
-    #     print_info(f"LCS similarity analysis complete with {len(results_list)} comparison pairs")
-    #     print_hashtags()
-    #     return pd.DataFrame(results_list)
-
-    # def analyze_lcs_similarity(self, df: pd.DataFrame) -> pd.DataFrame:
-        
-    #     """
-    #     Takes a dataframe of POI data and performs LCS similarity analysis using the helper function compute_lcs_matches().
-
-    #     Args:
-    #         df (pd.DataFrame): DataFrame containing POI data with 'id', 'name', 'category', and 'geom' columns.
-            
-    #     Returns:
-    #         pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
-    #         reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
-    #     """
-        
-    #     main_df = df[df['name'].notnull() & df['category'].notnull()]
-    #     if main_df.empty:
-    #         print_warning("No POI data found for LCS analysis. Check config.yaml and database connection.")
-    #         return pd.DataFrame()
-    #     kd_tree, coords_for_kd_tree, original_indices = self.build_kdtree(main_df)
-    #     if kd_tree is None:
-    #         return pd.DataFrame()
-    #     return self.compute_lcs_matches(main_df, kd_tree, original_indices)
-    
-    # def run_lcs_analysis(self, db_new):
-        
-    #     """
-    #     The core function to run the LCS analysis on new POI data using the configured parameters.
-        
-    #     Args:
-    #         db_new (Database): Database connection to the new POI database.
-        
-    #     Returns:
-    #         pd.DataFrame: A DataFrame containing the results of the LCS similarity analysis, including
-    #         reference and comparison POI details, geodesic distance, LCS scores, and whether the pair is flagged as similar.
-    #     """
-        
-    #     print_info("Starting LCS Analysis on new POI data under duplication check")
-    #     print_hashtags()
-        
-    #     query = f"SELECT {', '.join(self.poi_columns)} FROM {self.new_poi_table}"
-    #     df = db_new.select(query)
-    #     df = pd.DataFrame(df, columns=self.poi_columns) if df else None
-    #     if df is None or not isinstance(df, pd.DataFrame):
-    #         print_warning("Query did not return a DataFrame. Skipping LCS analysis.")
-    #         return
-    #     results_df = self.analyze_lcs_similarity(df)
-    #     matches = results_df[results_df['flagged']]
-    #     if not matches.empty:
-    #         print_info(f"Potential Matches found (Combined Similarity >= {self.lcs_config['threshold_lcs']}): {len(matches)}")
-    #         print_hashtags()
-    #     else:
-    #         print_info("  No potential matches found to display.")
-    #         print_hashtags()
-    #     return results_df
 
     def get_lcs_similarity_sql(self):
         """
@@ -1197,29 +1002,22 @@ def validate_poi(region: str):
         print_error(f"No metrics defined in poi.yaml for region '{region}'. Please configure at least one metric under 'validation.metrics'.")
         return
 
-    temp_geom_clone_table = validator.create_temp_geom_reference_table(db_old, db_new)
-
     if region == 'europe':
         for loop_region in validator.config.regions:
             for current_metric in all_metrics:
-                process_poi_validation(validator, "poi", loop_region, current_metric, temp_geom_clone_table, db_old, db_new)
+                geom_reference_query, temp_ref_clone_name = validator.get_geom_reference_table_and_query(current_metric)
+                temp_geom_clone_table = validator.create_temp_geom_reference_table(db_old, db_new, geom_reference_query, temp_ref_clone_name)
+                process_poi_validation(validator, "poi", loop_region, current_metric, temp_geom_clone_table, temp_ref_clone_name, db_old, db_new)
+                validator.drop_temp_geom_reference_table(db_new, temp_geom_clone_table)
     else:
         for current_metric in all_metrics:
             print_info(f"Performing calculations for metric '{current_metric}'")
             print_hashtags()
-            # process_poi_validation(validator, "poi", region, current_metric, temp_geom_clone_table, db_old, db_new)
+            geom_reference_query, temp_ref_clone_name = validator.get_geom_reference_table_and_query(current_metric)
+            temp_geom_clone_table = validator.create_temp_geom_reference_table(db_old, db_new, geom_reference_query, temp_ref_clone_name)
+            process_poi_validation(validator, "poi", region, current_metric, temp_geom_clone_table, temp_ref_clone_name, db_old, db_new)
+            validator.drop_temp_geom_reference_table(db_new, temp_geom_clone_table)
             
-    # lcs_results_df = validator.run_lcs_analysis(db_new)
-    # processed_lcs_df = validator.prepare_lcs_dataframe_for_export(lcs_results_df)
-    
-    # lcs_gpkg_output_path = os.path.join(validator.data_dir, "poi", f"poi_validation_lcs_{region}.gpkg")
-    # lcs_md_output_path = os.path.join(validator.data_dir, "poi", f"poi_validation_lcs_{region}.md")
-
-    # validator.generate_lcs_based_gpkg_file(processed_lcs_df, lcs_gpkg_output_path)    
-    # validator.generate_lcs_based_markdown_report(processed_lcs_df, lcs_md_output_path)
-    
-    # validator.drop_temp_geom_reference_table(db_new, temp_geom_clone_table)
-
     lcs_results_df = validator.run_lcs_analysis_sql(db_new)
     processed_lcs_df = validator.prepare_lcs_dataframe_for_export(lcs_results_df)
 
@@ -1232,15 +1030,15 @@ def validate_poi(region: str):
     db_old.close()
     db_new.close()
 
-def process_poi_validation(validator, dataset_type: str, region: str, metric: str, temp_geom_clone_table: str, db_old, db_new):
-    spatial_join_results = validator.run_core_validation_functions(db_old, db_new, temp_geom_clone_table, metric)
-    unified_results = validator.compare_new_and_old_results(spatial_join_results, metric)
+def process_poi_validation(validator, dataset_type: str, region: str, metric: str, temp_geom_clone_table: str, temp_ref_clone_name: str, db_old, db_new):
+    spatial_join_results = validator.run_metric_based_validation(db_old, db_new, temp_geom_clone_table, metric)
+    unified_results = validator.compare_metric_based_new_and_old_results(spatial_join_results, metric)
 
     gpkg_output_path = os.path.join(validator.data_dir, dataset_type, f"{dataset_type}_validation_{metric}_{region}.gpkg")
     validator.generate_metrics_based_gpkg_file(unified_results, gpkg_output_path)
 
     md_output_path = os.path.join(validator.data_dir, dataset_type, f"{dataset_type}_validation_{metric}_{region}.md")
-    validator.generate_metrics_based_markdown_report(unified_results, md_output_path, region=region, metric=metric)
+    validator.generate_metrics_based_markdown_report(unified_results, md_output_path, region=region, metric=metric, temp_ref_clone_name=temp_ref_clone_name)
 
 if __name__ == "__main__":
     validate_poi()
