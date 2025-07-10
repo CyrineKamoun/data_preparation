@@ -166,8 +166,55 @@ preparation:
   deli: 
     inherit: "supermarket"
 
+validation:
+  new_poi_table: "public.poi_osm_de"
+  old_poi_table:
+    ["goat.poi_shopping"]
+  metrics:
+    poi_count:
+      geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_counties"
+      thresholds:
+        default: 0.1
+        supermarket: 0.05
+        bakery: 0.06
+        pharmacy: 0.07
+        dentist: 0.03
+    # poi_density:
+    #   geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_counties"
+    #   thresholds:
+    #     default: 100.0
+    #     supermarket: 50.0
+    #     bakery: 80.0
+    #     pharmacy: 60.0
+    #     dentist: 30.0
+    #     restaurant: 200.0
+    #     hospital: 10.0
+    poi_per_people:
+      geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_municipalities"
+      capita_people_count: 1000
+      thresholds:
+        default: 0.1
+        supermarket: 0.05
+        bakery: 0.06
+    # population_per_poi:
+    #   geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_counties"
+    #   thresholds:
+    #     default: 0.2
+    #     restaurant: 0.1
+    #     hospital: 0.05
+  lcs:
+    poi_columns:
+    - id
+    - name
+    - category
+    - geom
+    excluded_categories: ['bus_stop', 'bus_station']
+    search_radius_m: 40       # Max planar distance in meters for finding nearby POIs
+    weights:
+      name: 0.6          # Weight for name similarity in combined score
+      category: 0.4      # Weight for category similarity in combined score
+    threshold_lcs: 0.55        # Overall similarity threshold for flagging a match
+
+
 subscription:
   repo_url: "https://github.com/goat-community/pois"
-    
-
-
