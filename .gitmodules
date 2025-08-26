@@ -1,6 +1,6 @@
 [submodule "src/submodules/goat"]
 	path = src/submodules/goat
-	url = https://github.com/goat-community/goat
+	url = https://github.com/plan4better/goat
 	branch = prod
 	shallow = true
 	
