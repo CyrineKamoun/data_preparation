@@ -68,25 +68,6 @@ class PoiPreparation:
         print_info("For key-value pairs that are not in the preparation config but in the collection config the POIs are added as preperation by tag.")
         return new_config_collection
 
-    def transfer_table_between_db(self, db_old: Database, db_new: Database,table_name: str):
-        """
-        Copy the geometry reference table from raw database to local database using ogr2ogr.
-        """
-
-        # Extract the reference geomtry table name from the yaml definition inside validation object
-        print_info(f"Creating {table_name} in new database")
-
-        ogr2ogr_command = (
-            f"ogr2ogr -f 'PostgreSQL' "
-            f"PG:'host={db_new.db_config.host} dbname={db_new.db_config.path.replace('/', '')} user={db_new.db_config.user} password={db_new.db_config.password} port={db_new.db_config.port}' "
-            f"PG:'host={db_old.db_config.host} dbname={db_old.db_config.path.replace('/', '')} user={db_old.db_config.user} password={db_old.db_config.password} port={db_old.db_config.port}' "
-            f'-nln "{table_name}" -overwrite -sql "{table_name}"'
-        )
-        try:
-            subprocess.run(ogr2ogr_command, shell=True, check=True)
-        except subprocess.CalledProcessError as e:
-            print_error(f"Reference geometry data table copy failed: {e}")
-
     @timing
     def read_poi(self) -> pl.DataFrame:
         """Reads the POIs from the database from the OSM point and OSM polygon table.
