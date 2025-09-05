@@ -1,0 +1,150 @@
+region_pbf : [
+   "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf"
+]
+collection:
+  osm_tags:
+    amenity: ["atm", "bank", "bar", "biergarten", "bicycle_parking", "bicycle_rental", "bus_station", "cafe", "car_sharing", "charging_station",
+              "cinema", "dentist", "doctors", "fast_food", "fuel", "ice_cream", "kneipp_water_cure", "library",
+              "marketplace", "nightclub", "pharmacy", "place_of_worship", "planetarium", "post_box", "post_office", "parking", "pub",
+              "recycling", "restaurant", "taxi", "theatre", "vending_machine"]
+    shop: ["bakery", "butcher", "chemist", "clothes", "convenience", "deli", "farm", "fashion", "florist", "fuel", "general",
+           "greengrocer", "grocery", "hairdresser", "health_food", "honey", "kiosk", "mall", "shoes", "sports",
+           "supermarket", "wine"]
+    tourism: ["alpine_hut", "apartment", "aquarium", "camp_site", "caravan_site", "chalet", "gallery", "guest_house",
+               "hostel", "hotel", "motel", "museum", "theme_park", "zoo"]
+    railway: ["platform", "station", "stop", "subway_entrance", "tram_stop"]
+    leisure: ["amusement_arcade", "disc_golf_course", "dog_park", "escape_game", "fitness_centre", "fitness_station",
+              "miniature_golf", "playground", "sports_centre", "sports_hall", "swimming_area", "water_park"]
+    sport: ["fitness", "swimming", "yoga"]
+    highway: ["bus_stop"]
+    public_transport: ["station", "stop_position"]
+    historic: ["aircraft", "aqueduct", "archaeological_site", "battlefield", "bomb_crater", "castle", "church",
+               "city_gate", "citywalls", "fort", "locomotive", "memorial", "monastery", "monument",
+               "railway_car", "ruins", "ship", "tank", "tomb", "tower", "vehicle", "wreck"]
+
+  additional_columns: ["name", "operator", "addr:street","addr:housenumber", "addr:postcode", "addr:city", "addr:country", "phone", "email", "website", 
+                       "capacity", "opening_hours", "wheelchair", "origin", "organic", "subway", "brand"]
+  nodes : True
+  ways : True
+  relations : True
+  
+  convenience:
+    classify_by_tag:
+      other_grocery:
+        shop: ["convenience"]
+
+  deli:
+    classify_by_tag:
+      other_grocery:
+        shop: ["deli"]
+      
+  greengrocer:
+    classify_by_tag:
+      other_grocery: 
+        shop: ["greengrocer"]
+  
+
+preparation: 
+  supermarket:
+    classify_by_name:
+      mini_supermarket: 
+        children:
+          spar_brand         :   ["spar express"]
+          migros_brand       :   ["migrolinos"]
+        threshold: 0.7
+
+      discount_supermarket: 
+        children:
+          aldi  : ["aldi"]
+          lidl  : ["lidl"]
+          denner : ["denner"]
+        threshold: 0.8
+
+      organic_supermarket:
+        children:
+          alnatura : ["alnatura"]
+        threshold: 0.7
+
+      supermarket: 
+        children:
+          coop     : ["coop"]
+          migros   : ["migros"]
+          spar     : ["spar"]
+          volg     : ["volg"]
+          manor_brand: ["manor food"]          
+        threshold: 0.7
+
+      wholesale: 
+        children:
+          metro     : ["metro"]
+          aligro    : ["aligro"]
+        threshold: 0.7
+
+  health_food: 
+    classify_by_tag:
+      organic_supermarket:
+        shop: ["health_food"]
+
+  greengrocer:
+    classify_by_tag:
+      other_grocery: 
+        shop: ["greengrocer"]
+
+  convenience: 
+    inherit: "supermarket"
+  grocery: 
+    inherit: "supermarket"
+  deli: 
+    inherit: "supermarket"
+  pub: 
+    inherit: "bar"
+  ice_cream:
+    inherit: "cafe"
+
+
+validation:
+  new_poi_table: "public.poi_osm_ch"
+  old_poi_table:
+    ["goat.poi_shopping","goat.poi_health","goat.poi_tourism_leisure","goat.poi_food_drink","goat.poi_mobility_service","goat.poi_public_service","goat.poi_service"]
+  metrics:
+    poi_count:
+      geom_reference_query: "SELECT id , name , geom, 0 as population FROM goat.division_area_all_county WHERE country='CH' "
+      thresholds:
+        absolute:
+          positive: 4
+          negative: -4
+        relative:
+          bakery: [-0.3, 0.3]
+          butcher: [-0.3, 0.3]
+          chemist: [-0.3, 0.3]
+          discount_supermarket: [-0.3, 0.3]
+          farm_shop: [-0.3, 0.3]
+          food_vending_machine: [-0.3, 0.3]
+          hypermarket: [-0.3, 0.3]
+          marketplace: [-0.3, 0.3]
+          organic_supermarket: [-0.3, 0.3]
+          other_grocery: [-0.3, 0.3]
+          supermarket: [-0.3, 0.3]
+          winery: [-0.3, 0.3]
+          dentist: [-0.3, 0.3]
+          general_practitioner: [-0.3, 0.3]
+          hospital: [-0.3, 0.3]
+          pharmacy: [-0.3, 0.3]
+      lower_bound: 3
+   
+  lcs:
+    poi_columns:
+    - id
+    - name
+    - category
+    - geom
+    excluded_categories: ['bus_stop', 'bus_station']
+    search_radius_m: 40       # Max planar distance in meters for finding nearby POIs
+    weights:
+      name: 0.6          # Weight for name similarity in combined score
+      category: 0.4      # Weight for category similarity in combined score
+    threshold_lcs: 0.55        # Overall similarity threshold for flagging a match
+
+
+subscription:
+  repo_url: "https://github.com/plan4better/pois"

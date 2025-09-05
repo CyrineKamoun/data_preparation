@@ -1,0 +1,216 @@
+region_pbf : [
+   "https://download.geofabrik.de/europe/france/alsace-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/aquitaine-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/auvergne-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/basse-normandie-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/bourgogne-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/bretagne-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/centre-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/champagne-ardenne-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/corse-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/franche-comte-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/guadeloupe-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/guyane-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/haute-normandie-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/ile-de-france-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/languedoc-roussillon-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/limousin-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/lorraine-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/martinique-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/mayotte-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/midi-pyrenees-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/nord-pas-de-calais-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/pays-de-la-loire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/picardie-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/poitou-charentes-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/provence-alpes-cote-d-azur-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/reunion-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/france/rhone-alpes-latest.osm.pbf",
+]
+collection:
+  osm_tags:
+    amenity: ["atm", "bank", "bar", "biergarten", "bicycle_parking", "bicycle_rental", "bus_station", "cafe", "car_sharing", "charging_station",
+              "cinema", "dentist", "doctors", "fast_food", "fuel", "ice_cream", "kneipp_water_cure", "library",
+              "marketplace", "nightclub", "pharmacy", "place_of_worship", "planetarium", "post_box", "post_office", "parking", "pub",
+              "recycling", "restaurant", "taxi", "theatre", "vending_machine"]
+    shop: ["bakery", "butcher", "chemist", "clothes", "convenience", "deli", "farm", "fashion", "florist", "fuel", "general",
+           "greengrocer", "grocery", "hairdresser", "health_food", "honey", "kiosk", "mall", "shoes", "sports",
+           "supermarket", "wine"]
+    tourism: ["alpine_hut", "apartment", "aquarium", "camp_site", "caravan_site", "chalet", "gallery", "guest_house",
+               "hostel", "hotel", "motel", "museum", "theme_park", "zoo"]
+    railway: ["platform", "station", "stop", "subway_entrance", "tram_stop"]
+    leisure: ["amusement_arcade", "disc_golf_course", "dog_park", "escape_game", "fitness_centre", "fitness_station",
+              "miniature_golf", "playground", "sports_centre", "sports_hall", "swimming_area", "water_park"]
+    sport: ["fitness", "swimming", "yoga"]
+    highway: ["bus_stop"]
+    public_transport: ["station", "stop_position"]
+    historic: ["aircraft", "aqueduct", "archaeological_site", "battlefield", "bomb_crater", "castle", "church",
+               "city_gate", "citywalls", "fort", "locomotive", "memorial", "monastery", "monument",
+               "railway_car", "ruins", "ship", "tank", "tomb", "tower", "vehicle", "wreck"]
+
+  additional_columns: ["name", "operator", "addr:street","addr:housenumber", "addr:postcode", "addr:city", "addr:country", "phone", "email", "website", 
+                       "capacity", "opening_hours", "wheelchair", "origin", "organic", "subway", "brand"]
+  nodes : True
+  ways : True
+  relations : True
+  
+  convenience:
+    classify_by_tag:
+      other_grocery:
+        shop: ["convenience"]
+
+  deli:
+    classify_by_tag:
+      other_grocery:
+        shop: ["deli"]
+      
+  greengrocer:
+    classify_by_tag:
+      other_grocery: 
+        shop: ["greengrocer"]
+
+
+preparation:
+  supermarket:
+    classify_by_name:
+      mini_supermarket: 
+        children:
+          monoprix_brand      : ["monop'daily"]
+          u_brand           : ["u utile","u express"]  
+          intermarche_brand   : ["intermarché express"]
+          casino_brand       : ["casino express","petit casino","casino shop","casino everyday"]
+          vival_brand        : ["vival"]
+          carrefour_brand    :   ["carrefour express"]
+          spar_brand         :   ["spar express"]
+        threshold: 0.7
+
+      hypermarket: 
+        children:
+          u_hyper             : ["hyper u"]
+          intermarche_hyper   : ["intermarché hyper"]
+          auchan_hyper        : ["auchan hypermarché"]
+          costco              :  ["costco"]
+        threshold: 0.9
+
+
+      discount_supermarket: 
+        children:
+          aldi  : ["aldi"]
+          lidl  : ["lidl"]
+          netto : ["netto"]
+          supeco : ["supeco"]
+          cash_and_carry : ["cash and carry","cash & carry"]
+        threshold: 0.8
+
+
+      supermarket: 
+        children:
+          monoprix_brand     : ["monoprix","monop'"]
+          franprix_brand     : ["franprix"]
+          u_brand           : ["super u","marché u"]  
+          intermarche_brand  : ["intermarché","intermarché super"]
+          casino_brand      : ["casino supermarché"]
+          auchan_brand      : ["auchan"]
+          leclerc_brand     : ["leclerc"]
+          carrefour_brand    :   ["carrefour","carrefour city"]
+          match_brand        :   ["match"]
+          g20_brand          :   ["g20"]
+        threshold: 0.8
+
+
+
+      organic_supermarket:
+        children:
+          naturalia : ["naturalia"]
+          biocoop : ["biocoop"]
+          lavieclair : ["la vie claire"]
+          biocbon : ["bio c' bon"]
+        threshold: 0.7
+
+      wholesale: 
+        children:
+          metro     : ["metro"]
+        threshold: 0.7
+
+    classify_by_tag:
+      organic_supermarket:
+        organic: ["only"]
+    unmatched: "other_grocery"
+
+  health_food: 
+    classify_by_tag:
+      organic_supermarket:
+        shop: ["health_food"]
+
+  greengrocer:
+    classify_by_tag:
+      other_grocery: 
+        shop: ["greengrocer"]
+
+  chemist:
+    classify_by_name:
+      pharmacy: 
+        children:
+          pharmacy      : ["pharmacie"]
+        threshold: 1
+  convenience: 
+    inherit: "supermarket"
+  grocery: 
+    inherit: "supermarket"
+  deli: 
+    inherit: "supermarket"
+  pub: 
+    inherit: "bar"
+  ice_cream:
+    inherit: "cafe"
+  planetarium:
+    inherit: "museum"
+
+validation:
+  new_poi_table: "public.poi_osm_fr"
+  old_poi_table:
+    ["goat.poi_shopping","goat.poi_health","goat.poi_tourism_leisure","goat.poi_food_drink","goat.poi_mobility_service","goat.poi_public_service","goat.poi_service"]
+  metrics:
+    poi_count:
+      geom_reference_query: "SELECT id , name , geom, 0 as population FROM goat.division_area_all_county WHERE country='FR' "
+      thresholds:
+        absolute:
+          positive: 4
+          negative: -4
+        relative:
+          bakery: [-0.3, 0.3]
+          butcher: [-0.3, 0.3]
+          chemist: [-0.3, 0.3]
+          discount_supermarket: [-0.3, 0.3]
+          farm_shop: [-0.3, 0.3]
+          food_vending_machine: [-0.3, 0.3]
+          hypermarket: [-0.3, 0.3]
+          marketplace: [-0.3, 0.3]
+          organic_supermarket: [-0.3, 0.3]
+          other_grocery: [-0.3, 0.3]
+          supermarket: [-0.3, 0.3]
+          winery: [-0.3, 0.3]
+          dentist: [-0.3, 0.3]
+          general_practitioner: [-0.3, 0.3]
+          hospital: [-0.3, 0.3]
+          pharmacy: [-0.3, 0.3]
+      lower_bound: 3
+
+   
+  lcs:
+    poi_columns:
+    - id
+    - name
+    - category
+    - geom
+    excluded_categories: ['bus_stop', 'bus_station']
+    search_radius_m: 40       # Max planar distance in meters for finding nearby POIs
+    weights:
+      name: 0.6          # Weight for name similarity in combined score
+      category: 0.4      # Weight for category similarity in combined score
+    threshold_lcs: 0.55        # Overall similarity threshold for flagging a match
+
+
+subscription:
+  repo_url: "https://github.com/plan4better/pois"
+

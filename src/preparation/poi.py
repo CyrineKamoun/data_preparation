@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 import geopandas as gpd
 import numpy as np
@@ -12,6 +13,7 @@ from src.preparation.subscription import Subscription
 from src.utils.utils import (
     create_table_dump,
     polars_df_to_postgis,
+    print_error,
     print_info,
     restore_table_dump,
     timing,
@@ -66,6 +68,25 @@ class PoiPreparation:
         print_info("For key-value pairs that are not in the preparation config but in the collection config the POIs are added as preperation by tag.")
         return new_config_collection
 
+    def transfer_table_between_db(self, db_old: Database, db_new: Database,table_name: str):
+        """
+        Copy the geometry reference table from raw database to local database using ogr2ogr.
+        """
+
+        # Extract the reference geomtry table name from the yaml definition inside validation object
+        print_info(f"Creating {table_name} in new database")
+
+        ogr2ogr_command = (
+            f"ogr2ogr -f 'PostgreSQL' "
+            f"PG:'host={db_new.db_config.host} dbname={db_new.db_config.path.replace('/', '')} user={db_new.db_config.user} password={db_new.db_config.password} port={db_new.db_config.port}' "
+            f"PG:'host={db_old.db_config.host} dbname={db_old.db_config.path.replace('/', '')} user={db_old.db_config.user} password={db_old.db_config.password} port={db_old.db_config.port}' "
+            f'-nln "{table_name}" -overwrite -sql "{table_name}"'
+        )
+        try:
+            subprocess.run(ogr2ogr_command, shell=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print_error(f"Reference geometry data table copy failed: {e}")
+
     @timing
     def read_poi(self) -> pl.DataFrame:
         """Reads the POIs from the database from the OSM point and OSM polygon table.
@@ -83,8 +104,8 @@ class PoiPreparation:
 
         # Read POIs from database
         sql_query = [
-            f"""SELECT {column_names}, 'n' AS osm_type, ST_ASTEXT(way) AS geom FROM public.osm_poi_{self.region}_point""",
-            f"""SELECT {column_names}, 'w' AS osm_type, ST_ASTEXT(ST_CENTROID(way)) AS geom FROM public.osm_poi_{self.region}_polygon""",
+            f""" SELECT DISTINCT ON (osm_id) {column_names}, 'n' AS osm_type, ST_ASTEXT(way) AS geom FROM public.osm_poi_{self.region}_point""",
+            f"""SELECT DISTINCT ON (osm_id)  {column_names}, 'w' AS osm_type, ST_ASTEXT(ST_CENTROID(way)) AS geom FROM public.osm_poi_{self.region}_polygon""",
         ]
         df = pl.read_database_uri(sql_query, self.db_uri)
         return df
@@ -544,7 +565,7 @@ class PoiPreparation:
         # Assigning the name to the subway entrance
         df_subway_entrances = (
             df_subway_entrances.with_columns(
-                pl.Series(name="new_name", values=name_to_assign, dtype=pl.Utf8)
+                pl.Series(name="new_name", values=name_to_assign, dtype=pl.Utf8,strict=False)
             )
             .with_columns(
                 pl.when(pl.col("new_name") != "nan")
@@ -710,7 +731,7 @@ class PoiPreparation:
             pl.when(
                 (pl.col("amenity") == "vending_machine")
                 & (pl.col("tags").map_elements(
-                    lambda tags: any(tag in tags for tag in ['food', 'bread', 'milk', 'eggs', 'meat', 'potato', 'honey', 'cheese']),
+                    lambda tags: any(tag in tags for tag in ['food', 'bread', 'milk', 'eggs', 'meat', 'potato', 'honey', 'cheese','drinks','sweets']),
                     return_dtype=pl.Boolean
                 ))
             )
@@ -777,9 +798,7 @@ class PoiPreparation:
         #             .otherwise(pl.col("category"))
         #             .alias("category")
         #         )
-
         return df
-
 
 def prepare_poi(region: str):
     """Prepare POI data for the region.
@@ -788,10 +807,21 @@ def prepare_poi(region: str):
         region (str): Region to prepare POI data for.
     """
 
+    # copy nuts data from raw database to local database
     db = Database(settings.LOCAL_DATABASE_URI)
+    db_rd = Database(settings.RAW_DATABASE_URI)
+    ogr2ogr_command = (
+            f"ogr2ogr -f 'PostgreSQL' "
+            f"PG:'host={db.db_config.host} dbname={db.db_config.path.replace('/', '')} user={db.db_config.user} password={db.db_config.password} port={db.db_config.port}' "
+            f"PG:'host={db_rd.db_config.host} dbname={db_rd.db_config.path.replace('/', '')} user={db_rd.db_config.user} password={db_rd.db_config.password} port={db_rd.db_config.port}' "
+            f'-nln nuts -overwrite -sql "SELECT * FROM nuts"'
+        )
+    try:
+        subprocess.run(ogr2ogr_command, shell=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print_error(f"Reference geometry data table copy failed: {e}")
 
-    if region == 'europe':
-
+    if region == 'europe': 
         create_table_sql = POITable(data_set_type='poi', schema_name = 'poi', data_set_name =f'osm_{region}').create_poi_table(table_type='standard')
         db.perform(create_table_sql)
 
@@ -826,6 +856,7 @@ def prepare_poi(region: str):
     print_info(f'Preparation of region {region} is finished.')
 
     db.conn.close()
+    db_rd.conn.close()
 
 def process_poi_preparation(db: Database, region: str):
     """Process POI preparation for a given region."""
@@ -833,7 +864,9 @@ def process_poi_preparation(db: Database, region: str):
 
     # Read and classify POI data
     df = poi_preparation.read_poi()
+    
     df = poi_preparation.classify_poi(df)
+    
 
     # Export raw data to local PostGIS
     engine = db.return_sqlalchemy_engine()
@@ -879,8 +912,11 @@ def process_poi_preparation(db: Database, region: str):
                     highway, 'public_transport', public_transport, 'historic', historic, 'brand', brand
                 ) || tags) || jsonb_build_object('extended_source', jsonb_build_object('osm_id', osm_id, 'osm_type', osm_type))
             )) AS tags,
-            geom
-        FROM public.poi_osm_{region}_raw
+            r.geom
+        FROM public.poi_osm_{region}_raw as r
+        join public.nuts as nu
+        ON ST_Intersects(r.geom, nu.geom)
+        WHERE nu.levl_code = 0 AND nu.nuts_id = '{region.upper()}'
     """
     db.perform(insert_poi_osm_sql)
 

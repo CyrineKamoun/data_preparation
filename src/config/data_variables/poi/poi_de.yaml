@@ -45,6 +45,13 @@ collection:
 preparation:
   supermarket:
     classify_by_name:
+      mini_supermarket: 
+        children:
+          rewe_brand     : ["rewe to go","rewe express"]
+          spar_brand     : ["spar express"]
+          edeka_brand    : ["edeka xpress"]
+          konsum_brand    : ["konsum express"]
+        threshold: 0.9
       supermarket: 
         children:
           rewe     : ["rewe", "rewe city"]
@@ -165,20 +172,40 @@ preparation:
     inherit: "supermarket"
   deli: 
     inherit: "supermarket"
+  pub: 
+    inherit: "bar"
+  ice_cream:
+    inherit: "cafe"
 
 validation:
   new_poi_table: "public.poi_osm_de"
   old_poi_table:
-    ["goat.poi_shopping"]
+    ["goat.poi_shopping","goat.poi_health","goat.poi_tourism_leisure","goat.poi_food_drink","goat.poi_mobility_service","goat.poi_public_service","goat.poi_service"]
   metrics:
     poi_count:
-      geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_counties"
+      geom_reference_query: "SELECT objektidentifikator AS id , geografischername_gen AS name, 0 as population, geom AS geom FROM public.germany_counties"
       thresholds:
-        default: 0.1
-        supermarket: 0.05
-        bakery: 0.06
-        pharmacy: 0.07
-        dentist: 0.03
+        absolute:
+          positive: 4
+          negative: -4
+        relative:
+          bakery: [-0.3, 0.3]
+          butcher: [-0.3, 0.3]
+          chemist: [-0.3, 0.3]
+          discount_supermarket: [-0.3, 0.3]
+          farm_shop: [-0.3, 0.3]
+          food_vending_machine: [-0.3, 0.3]
+          hypermarket: [-0.3, 0.3]
+          marketplace: [-0.3, 0.3]
+          organic_supermarket: [-0.3, 0.3]
+          other_grocery: [-0.3, 0.3]
+          supermarket: [-0.3, 0.3]
+          winery: [-0.3, 0.3]
+          dentist: [-0.3, 0.3]
+          general_practitioner: [-0.3, 0.3]
+          hospital: [-0.3, 0.3]
+          pharmacy: [-0.3, 0.3]
+      lower_bound: 3
     # poi_density:
     #   geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_counties"
     #   thresholds:
@@ -190,12 +217,27 @@ validation:
     #     restaurant: 200.0
     #     hospital: 10.0
     poi_per_people:
-      geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_municipalities"
+      geom_reference_query: "SELECT objektidentifikator AS id , einwohnerzahl_ewz as population, geografischername_gen AS name, geom FROM public.germany_municipalities"
       capita_people_count: 1000
       thresholds:
-        default: 0.1
-        supermarket: 0.05
-        bakery: 0.06
+        absolute:
+          positive: 0.3
+          negative: -0.3
+        relative:
+          bakery: [-0.5, 0.5]
+          butcher: [-0.5, 0.5]
+          chemist: [-0.5, 0.5]
+          discount_supermarket: [-0.5, 0.5]
+          farm_shop: [-0.5, 0.5]
+          food_vending_machine: [-0.5, 0.5]
+          hypermarket: [-0.5, 0.5]
+          marketplace: [-0.5, 0.5]
+          organic_supermarket: [-0.5, 0.5]
+          other_grocery: [-0.5, 0.5]
+          supermarket: [-0.5, 0.5]
+          winery: [-0.5, 0.5]
+        # new_emergence: 0.05
+      lower_bound: 0.03
     # population_per_poi:
     #   geom_reference_query: "SELECT objektidentifikator, geografischername_gen, einwohnerzahl_ewz, geom FROM public.germany_counties"
     #   thresholds:

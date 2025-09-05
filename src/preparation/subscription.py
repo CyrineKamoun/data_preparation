@@ -1,10 +1,11 @@
+import datetime
+
+from src.collection.kart.prepare_kart import PrepareKart
 from src.config.config import Config
+from src.core.enums import DumpType
 from src.db.db import Database
 from src.db.tables.poi import POITable
-from src.collection.kart.prepare_kart import PrepareKart
-from src.core.enums import DumpType
-from src.utils.utils import print_info, timing, create_table_dump, restore_table_dump
-import datetime
+from src.utils.utils import create_table_dump, print_info, restore_table_dump, timing
 
 #TODO: optional
 # 0. optional prepare requested data that should be updated by the subscription
@@ -43,7 +44,7 @@ class Subscription:
             "childcare",
             "school",
         ]
-        self.geonode_schema_name = "poi"
+        self.geonode_schema_name = "goat"
 
         self.table_name = "poi"
         self.region = region
@@ -604,7 +605,13 @@ class Subscription:
         for poi_category in self.poi_categories:
 
             self.prepare_poi_tables(poi_category, geonode_poi_table_names)
-            self.migrate_kart_tables(poi_category)
+            #self.migrate_kart_tables(poi_category)
+            # Hardcoded new categories to add
+            new_categories = {
+                "tourism_leisure": ["theater"],
+                "shopping": ["clothes", "shoes", "mini_supermarket", "kiosk"],
+                "service"  : ["hairdresser"]
+            }
 
             # childcare and school only individual sources
             if poi_category not in ('childcare', 'school'):
@@ -615,12 +622,14 @@ class Subscription:
                 # Get categories to update
                 sql_get_categories_to_update = f"""
                     SELECT DISTINCT category
-                    FROM {self.geonode_schema_name}.data_subscription
-                    WHERE source IN ('OSM', 'OSM_Overture', 'Overture')
-                    and category in ('{category_update}');
+                    FROM {self.geonode_schema_name}.poi_{poi_category};
                 """
                 categories = self.db_rd.select(sql_get_categories_to_update)
                 categories = [category[0] for category in categories]
+                
+                # Add new categories if defined for this poi_category, only if not already present
+                if poi_category in new_categories:
+                    categories += [cat for cat in new_categories[poi_category] if cat not in categories]
 
                 for category in categories:
 

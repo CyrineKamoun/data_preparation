@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     POSTGRES_DB_GOAT: Optional[str] = None
     POSTGRES_PORT_GOAT: Optional[str] = None
     GOAT_DATABASE_URI: Optional[SyncPostgresDsn] = None
-    @validator("GOAT_DATABASE_URI", pre=True)
+    #@validator("GOAT_DATABASE_URI", pre=True)
     def assemble_goat_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
         if isinstance(v, str):
             return v
@@ -89,7 +89,7 @@ class Settings(BaseSettings):
     POSTGRES_DB_3DCITY: Optional[str] = None
     POSTGRES_PORT_3DCITY: Optional[str] = None
     CITYGML_DATABASE_URI: Optional[SyncPostgresDsn] = None
-    @validator("CITYGML_DATABASE_URI", pre=True)
+    #@validator("CITYGML_DATABASE_URI", pre=True)
     def assemble_citygml_db_connection(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
         if isinstance(v, str):
             return v
@@ -109,7 +109,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = None
     AWS_DEFAULT_REGION: str = None
     S3_CLIENT: Optional[Any] = None
-    @validator("S3_CLIENT", pre=True)
+    #@validator("S3_CLIENT", pre=True)
     def assemble_s3_client(cls, v: Optional[str], values: Dict[str, Any]) -> Any:
         if isinstance(v, str):
             return v
