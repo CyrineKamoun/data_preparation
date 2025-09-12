@@ -45,7 +45,7 @@ collection:
 preparation:
   supermarket:
     classify_by_name:
-      mini_supermarket: 
+      convenience: 
         children:
           rewe_brand     : ["rewe to go","rewe express"]
           spar_brand     : ["spar express"]

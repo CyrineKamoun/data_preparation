@@ -83,6 +83,37 @@ preparation:
         children:
           rewe     : ["rewe", "rewe city"]
         threshold: 0.7
+
+  
+validation:
+  new_poi_table: "public.poi_osm_uk"
+  old_poi_table:
+    ["goat.poi_shopping"]
+  metrics:
+    poi_count:
+      geom_reference_query: "SELECT id , name , geom, 0 as population FROM goat.division_area_all_county WHERE country='GB' "
+      thresholds:
+        absolute:
+          positive: 4
+          negative: -4
+        relative:
+          bakery: [-0.3, 0.3]
+          butcher: [-0.3, 0.3]
+          chemist: [-0.3, 0.3]
+          discount_supermarket: [-0.3, 0.3]
+          farm_shop: [-0.3, 0.3]
+          food_vending_machine: [-0.3, 0.3]
+          hypermarket: [-0.3, 0.3]
+          marketplace: [-0.3, 0.3]
+          organic_supermarket: [-0.3, 0.3]
+          other_grocery: [-0.3, 0.3]
+          supermarket: [-0.3, 0.3]
+          winery: [-0.3, 0.3]
+          dentist: [-0.3, 0.3]
+          general_practitioner: [-0.3, 0.3]
+          hospital: [-0.3, 0.3]
+          pharmacy: [-0.3, 0.3]
+      lower_bound: 3
         
 subscription:
   repo_url: "https://github.com/plan4better/pois"

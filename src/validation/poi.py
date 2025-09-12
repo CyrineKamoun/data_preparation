@@ -42,11 +42,11 @@ class PoiValidation:
 
         self.all_metrics = list(self.config.validation["metrics"].keys())
 
-        self.lcs_config = self.config.validation["lcs"]
-        self.poi_columns = self.lcs_config["poi_columns"]
-        self.excluded_categories = self.lcs_config["excluded_categories"]
-        self.proximity_radius_m = self.lcs_config["search_radius_m"]
-        self.threshold_lcs = self.lcs_config["threshold_lcs"]
+        #self.lcs_config = self.config.validation["lcs"]
+        #self.poi_columns = self.lcs_config["poi_columns"]
+        #self.excluded_categories = self.lcs_config["excluded_categories"]
+        #self.proximity_radius_m = self.lcs_config["search_radius_m"]
+        #self.threshold_lcs = self.lcs_config["threshold_lcs"]
 
     def get_metric_clause(self, metric_name):
         """
@@ -1114,6 +1114,7 @@ def validate_poi(region: str):
                 print_info(f"Performing calculations for metric '{current_metric}'")
                 print_hashtags()
                 process_poi_validation(validator, "poi", loop_region, current_metric,  db_old, db_new)
+        
     else:
         for current_metric in all_metrics:
             print_info(f"Performing calculations for metric '{current_metric}'")

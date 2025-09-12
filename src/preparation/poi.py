@@ -869,7 +869,7 @@ def process_poi_preparation(db: Database, region: str):
     # insert into our POI schema
     create_table_sql = POITable(data_set_type='poi', schema_name = 'public', data_set_name =f'osm_{region}').create_poi_table(table_type='standard')
     db.perform(create_table_sql)
-
+    
     insert_poi_osm_sql = f"""
         INSERT INTO public.poi_osm_{region}(category, name, operator, street, housenumber, zipcode, phone, email, website, capacity, opening_hours, wheelchair, source, tags, geom)
         SELECT
@@ -894,11 +894,17 @@ def process_poi_preparation(db: Database, region: str):
                 ) || tags) || jsonb_build_object('extended_source', jsonb_build_object('osm_id', osm_id, 'osm_type', osm_type))
             )) AS tags,
             r.geom
-        FROM public.poi_osm_{region}_raw as r
-        join public.nuts as nu
-        ON ST_Intersects(r.geom, nu.geom)
-        WHERE nu.levl_code = 0 AND nu.nuts_id = '{region.upper()}'
-    """
+        FROM public.poi_osm_{region}_raw as r"""
+    if region != "europe":
+        insert_poi_osm_sql = (
+            insert_poi_osm_sql +
+            """
+            join public.nuts as nu
+            ON ST_Intersects(r.geom, nu.geom)
+            WHERE nu.levl_code = 0 AND nu.nuts_id = '{region_upper}'
+            """
+        ).format(region=region, region_upper=region.upper())
+    
     db.perform(insert_poi_osm_sql)
 
 def export_poi(region: str):

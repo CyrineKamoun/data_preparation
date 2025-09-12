@@ -35,6 +35,14 @@ collection:
 preparation:
   supermarket:
     classify_by_name:
+      convenience: 
+        children:
+          carrefour_brand : ["carrefour express"]
+          conad_brand : ["margherita conad"]
+          a&o_brand: ["spesa a&o"]
+          despart_brand: ["despar express",]
+        threshold: 1
+    
       supermarket: 
         children:
           basko : ["basko"]

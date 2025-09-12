@@ -1,16 +1,5 @@
 region_pbf : [
-  "https://download.geofabrik.de/europe/netherlands/drenthe-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/flevoland-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/friesland-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/gelderland-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/groningen-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/limburg-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/noord-brabant-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/noord-holland-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/overijssel-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/utrecht-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/zeeland-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/netherlands/zuid-holland-latest.osm.pbf"
+  "https://download.geofabrik.de/europe/netherlands-latest.osm.pbf",
 ]
 collection:
   osm_tags:
@@ -39,6 +28,7 @@ collection:
   ways : True
   relations : True
   
+preparation:
   convenience:
     classify_by_tag:
       other_grocery:

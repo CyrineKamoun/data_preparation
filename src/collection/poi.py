@@ -46,6 +46,7 @@ def collect_poi(region: str):
     if region == 'europe':
         for loop_region in Config("poi", region).regions:
             process_poi_collection(db, loop_region)
+        process_poi_collection(db, 'europe')
     else:
         process_poi_collection(db, region)
 
@@ -56,7 +57,7 @@ def process_poi_collection(db: Database, region: str):
     osm_poi_collection = OSMPOICollection(db_config=db.db_config, region=region)
     osm_poi_collection.poi_collection()
     osm_poi_collection.export_osm_boundaries_db(db=db)
-    osm_poi_collection.upload_raw_osm_data(boto_client=settings.S3_CLIENT)
+    #osm_poi_collection.upload_raw_osm_data(boto_client=settings.S3_CLIENT)
 
 
 if __name__ == "__main__":
