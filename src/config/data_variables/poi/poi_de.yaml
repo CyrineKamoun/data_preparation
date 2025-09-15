@@ -260,3 +260,14 @@ validation:
 
 subscription:
   repo_url: "https://github.com/plan4better/pois"
+  merged_categories:
+    sight_or_cultural_site: ['aircraft', 'aqueduct', 'archaeological_site', 'battlefield', 'bomb_crater', 'castle', 'city_gate', 'citywalls', 'farm', 'fort', 'locomotive', 'memorial', 'monument', 'railway_car', 'ruins', 'ship', 'tank', 'tomb', 'tower', 'vehicle', 'wreck', 'pier', 'lighthouse', 'obelisk', 'stupa', 'windmill', 'artwork']
+    recreational_or_adventure_facility: ['amusement_arcade', 'disc_golf_course', 'dog_park', 'escape_game', 'miniature_golf', 'aquarium', 'zoo', 'theme_park']
+    water_recreation_or_wellness_facility: ['swimming', 'water_park', 'kneipp_water_cure', 'public_bath', 'bathing_place']
+    indoor_accommodation: ['hotel', 'alpine_hut', 'apartment','chalet', 'hostel', 'motel', 'guest_house']
+    outdoor_accommodation: ['camp_site', 'caravan_site']
+
+
+
+
+    

@@ -486,47 +486,78 @@ class Subscription:
             """
             self.db_rd.perform(sql_add_loop_id)
 
-            create_poi_to_integrate_sql = f"""
-                INSERT INTO {self.table_name}_to_seed(category, other_categories, name, operator, street, housenumber, zipcode, phone, email, website, capacity, opening_hours, wheelchair, source, tags, geom)
-                SELECT
-                    category,
-                    other_categories,
-                    CASE WHEN TRIM(name) = '' THEN NULL ELSE TRIM(name) END,
-                    CASE WHEN TRIM(operator) = '' THEN NULL ELSE TRIM(operator) END,
-                    CASE WHEN TRIM(street) = '' THEN NULL ELSE TRIM(street) END,
-                    CASE WHEN TRIM(housenumber) = '' THEN NULL ELSE TRIM(housenumber) END,
-                    CASE WHEN TRIM(zipcode) = '' THEN NULL ELSE TRIM(zipcode) END,
-                    CASE WHEN TRIM(phone) = '' THEN NULL ELSE TRIM(phone) END,
-                    CASE WHEN octet_length(TRIM(email)) BETWEEN 6 AND 320 AND TRIM(email) LIKE '_%@_%.__%' THEN TRIM(email) ELSE NULL END,
-                    CASE WHEN TRIM(website) ~* '^[a-z](?:[-a-z0-9\+\.])*:(?:\/\/(?:(?:%[0-9a-f][0-9a-f]|[-a-z0-9\._~!\$&''\(\)\*\+,;=:@])|[\/\?])*)?' :: TEXT THEN TRIM(website) ELSE NULL END,
-                    CASE WHEN TRIM(capacity) ~ '^[0-9]+$' THEN CAST(TRIM(capacity) AS INTEGER) ELSE NULL END,
-                    CASE WHEN TRIM(opening_hours) = '' THEN NULL ELSE TRIM(opening_hours) END,
-                    CASE WHEN TRIM(wheelchair) IN ('yes', 'no', 'limited') THEN TRIM(wheelchair) ELSE NULL END,
-                    source,
-                    tags,
-                    p.geom
-                FROM {self.get_source_table(category)} p, geom_filter_subscribe f
-                WHERE ST_Intersects(p.geom, f.geom)
-                AND p.source in ('OSM', 'Overture', 'OSM_Overture', 'Overture_OSM')
-                AND p.category = '{category}';
-            """
-            self.db_rd.perform(create_poi_to_integrate_sql)
+            # Handle merged categories: if the current category is part of a merged category, insert with merged category name
+            merged_categories = self.config_pois.subscription.get("merged_categories", {})
+            merged_category_keys = [k for k, v in merged_categories.items() if category in v]
+
+            if category in merged_category_keys:
+                create_poi_to_integrate_sql = f"""
+                        INSERT INTO {self.table_name}_to_seed(category, other_categories, name, operator, street, housenumber, zipcode, phone, email, website, capacity, opening_hours, wheelchair, source, tags, geom)
+                        SELECT
+                            '{category}' as category,
+                            other_categories,
+                            CASE WHEN TRIM(name) = '' THEN NULL ELSE TRIM(name) END,
+                            CASE WHEN TRIM(operator) = '' THEN NULL ELSE TRIM(operator) END,
+                            CASE WHEN TRIM(street) = '' THEN NULL ELSE TRIM(street) END,
+                            CASE WHEN TRIM(housenumber) = '' THEN NULL ELSE TRIM(housenumber) END,
+                            CASE WHEN TRIM(zipcode) = '' THEN NULL ELSE TRIM(zipcode) END,
+                            CASE WHEN TRIM(phone) = '' THEN NULL ELSE TRIM(phone) END,
+                            CASE WHEN octet_length(TRIM(email)) BETWEEN 6 AND 320 AND TRIM(email) LIKE '_%@_%.__%' THEN TRIM(email) ELSE NULL END,
+                            CASE WHEN TRIM(website) ~* '^[a-z](?:[-a-z0-9\+\.]*)*:(?:\/\/(?:(?:%[0-9a-f][0-9a-f]|[-a-z0-9\._~!\$&''\(\)\*\+,;=:@])|[\/\?])*)?' :: TEXT THEN TRIM(website) ELSE NULL END,
+                            CASE WHEN TRIM(capacity) ~ '^[0-9]+$' THEN CAST(TRIM(capacity) AS INTEGER) ELSE NULL END,
+                            CASE WHEN TRIM(opening_hours) = '' THEN NULL ELSE TRIM(opening_hours) END,
+                            CASE WHEN TRIM(wheelchair) IN ('yes', 'no', 'limited') THEN TRIM(wheelchair) ELSE NULL END,
+                            source,
+                            tags,
+                            p.geom
+                        FROM {self.get_source_table(category)} p, geom_filter_subscribe f
+                        WHERE ST_Intersects(p.geom, f.geom)
+                        AND p.source in ('OSM', 'Overture', 'OSM_Overture', 'Overture_OSM')
+                        AND p.category in ({", ".join([f"'{cat}'" for cat in merged_categories[category]])});
+                    """
+                self.db_rd.perform(create_poi_to_integrate_sql)
+            else:
+                create_poi_to_integrate_sql = f"""
+                    INSERT INTO {self.table_name}_to_seed(category, other_categories, name, operator, street, housenumber, zipcode, phone, email, website, capacity, opening_hours, wheelchair, source, tags, geom)
+                    SELECT
+                        category,
+                        other_categories,
+                        CASE WHEN TRIM(name) = '' THEN NULL ELSE TRIM(name) END,
+                        CASE WHEN TRIM(operator) = '' THEN NULL ELSE TRIM(operator) END,
+                        CASE WHEN TRIM(street) = '' THEN NULL ELSE TRIM(street) END,
+                        CASE WHEN TRIM(housenumber) = '' THEN NULL ELSE TRIM(housenumber) END,
+                        CASE WHEN TRIM(zipcode) = '' THEN NULL ELSE TRIM(zipcode) END,
+                        CASE WHEN TRIM(phone) = '' THEN NULL ELSE TRIM(phone) END,
+                        CASE WHEN octet_length(TRIM(email)) BETWEEN 6 AND 320 AND TRIM(email) LIKE '_%@_%.__%' THEN TRIM(email) ELSE NULL END,
+                        CASE WHEN TRIM(website) ~* '^[a-z](?:[-a-z0-9\+\.]*)*:(?:\/\/(?:(?:%[0-9a-f][0-9a-f]|[-a-z0-9\._~!\$&''\(\)\*\+,;=:@])|[\/\?])*)?' :: TEXT THEN TRIM(website) ELSE NULL END,
+                        CASE WHEN TRIM(capacity) ~ '^[0-9]+$' THEN CAST(TRIM(capacity) AS INTEGER) ELSE NULL END,
+                        CASE WHEN TRIM(opening_hours) = '' THEN NULL ELSE TRIM(opening_hours) END,
+                        CASE WHEN TRIM(wheelchair) IN ('yes', 'no', 'limited') THEN TRIM(wheelchair) ELSE NULL END,
+                        source,
+                        tags,
+                        p.geom
+                    FROM {self.get_source_table(category)} p, geom_filter_subscribe f
+                    WHERE ST_Intersects(p.geom, f.geom)
+                    AND p.source in ('OSM', 'Overture', 'OSM_Overture', 'Overture_OSM')
+                    AND p.category = '{category}';
+                """
+                self.db_rd.perform(create_poi_to_integrate_sql)
         except IndexError:
             print(f"No data found for category '{category}'")
         except Exception as e:
             print(f"An error occurred: {e}")
-
+    
     @timing
-    def insert_poi(self, category: str):
+    def insert_poi(self, category: str,poi_category):
         """Inserts the POIs into Geonode POI table.
 
         Args:
             row_cnt (int): Number of rows to process
             category (str): Category of POIs to read
         """
-
+        poi_table_name = f"poi_{poi_category}"
         insert_into_poi_table_sql = f"""
-            INSERT INTO {self.geonode_schema_name}.{self.get_kart_poi_table_name(category)}(category, other_categories, operator, name, street, housenumber, zipcode, phone, email, website, capacity, opening_hours, wheelchair, source, tags, geom)
+            INSERT INTO {self.geonode_schema_name}.{poi_table_name}(category, other_categories, operator, name, street, housenumber, zipcode, phone, email, website, capacity, opening_hours, wheelchair, source, tags, geom)
             SELECT
                 category,
                 other_categories,
@@ -616,9 +647,6 @@ class Subscription:
             # childcare and school only individual sources
             if poi_category not in ('childcare', 'school'):
 
-                category_update = self.db.select(f"""SELECT category FROM {self.kart_schema}.poi_categories WHERE table_name = 'poi_{poi_category}'""")
-                category_update = "', '".join([str(row[0]) for row in category_update])
-
                 # Get categories to update
                 sql_get_categories_to_update = f"""
                     SELECT DISTINCT category
@@ -638,7 +666,7 @@ class Subscription:
                         self.insert_gtfs_pt_stops(category=category)
 
                     self.read_poi(category)
-                    self.insert_poi(category)
+                    self.insert_poi(category,poi_category)
                     self.update_date_subscription(category)
 
                 # additional indices: gist on geom and btree on category
