@@ -23,8 +23,8 @@ class OSMBuildingCollection(OSMCollection):
         self.download_bulk_osm()
         self.prepare_bulk_osm(osm_filter=osm_filter)
         self.merge_osm_and_import()
-        db.perform("DROP TABLE IF EXISTS building_osm;")
-        db.perform("ALTER TABLE osm_building_polygon RENAME TO building_osm;")
+        db.perform(f"DROP TABLE IF EXISTS building_osm_{self.region};")
+        db.perform(f"ALTER TABLE osm_building_{self.region}_polygon RENAME TO building_osm_{self.region};")
 
 def collect_building(region: str):
     db = Database(settings.LOCAL_DATABASE_URI)

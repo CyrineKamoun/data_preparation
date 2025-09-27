@@ -1,0 +1,86 @@
+region_pbf:
+  [
+   "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf"
+  ]
+
+collection:
+  osm_tags:
+    building: [True]
+  additional_columns:
+    [
+      "amenity",
+      "leisure",
+      "addr:street",
+      "addr:housenumber",
+      "building:levels",
+      "roof:levels",
+    ]
+  nodes: False
+  ways: True
+  relations: False
+
+preparation:
+  schema: "basic"
+  average_building_levels: 2
+  study_area_ids: [1]
+
+  classification:
+    residential_status:
+      polygon:
+        building_osm:
+          query: "SELECT way AS geom FROM building_osm_ch WHERE amenity IN ('hospital', 'university', 'community_centre', 'school', 'kindergarten', 'recreation_ground', 'wood') OR leisure IN ('zoo')"
+          value: "'no_residents'"
+          share: 0.5
+
+        building_osm2:
+          query: "SELECT way AS geom FROM building_osm_ch WHERE building IN ('apartments', 'bungalow', 'detached', 'dormitory', 'residential', 'house', 'terrace', 'home', 'semidetached_house')"
+          value: "'with_residents'"
+          share: 0.5
+
+      point:
+        poi:
+          query: "SELECT count(*) AS count FROM poi_osm_ch p"
+          value: "'no_residents'"
+          count: 5
+
+      attribute:
+        building_type:
+          with_residents:
+              [ "Gebaeude Einzelhaus","Hochhaus"]
+          no_residents:
+             [  "Bruecke gedeckt",
+               "Flugdach",
+               "Historische Baute",
+               "Hochkamin",
+               "Kapelle",
+               "Kuehlturm",
+               "Lagertank",
+               "Lueftungsschacht",
+               "Mauer gross",
+               "Mauer gross gedeckt",
+               "Offenes Gebaeude",
+               "Sakraler Turm",
+               "Sakrales Gebaeude",
+               "Treibhaus",
+               "Turm",
+               "Verbindungsbrücke"
+          ]
+
+
+
+        # address:
+        #   query: "SELECT count(*) AS count FROM public.ga_germany p"
+        #   db: "foreign"
+        #   value: "'no_residents'"
+        #   count: 0
+
+
+    building_levels_residential:
+      point:
+        poi_osm:
+          query: "SELECT CASE WHEN count(*) > 0 THEN 1 END AS substract FROM osm_poi_ch_point p WHERE (shop IS NOT NULL	OR	amenity IS NOT NULL	OR	office IS NOT NULL) AND ST_Intersects(b.geom, p.way)"
+        polygon:
+          query: "SELECT CASE WHEN count(*) > 0 THEN 1 END AS substract FROM osm_poi_ch_polygon p WHERE (shop IS NOT NULL	OR	amenity IS NOT NULL	OR	office IS NOT NULL) AND ST_Intersects(b.geom, p.way)"
+
+        poi:
+          query: "SELECT CASE WHEN count(*) > 0 THEN 1 END AS substract FROM poi_osm_ch p WHERE ST_Intersects(b.geom, p.geom)"

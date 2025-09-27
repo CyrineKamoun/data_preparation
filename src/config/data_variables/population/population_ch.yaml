@@ -1,0 +1,5 @@
+preparation:
+  schema: "basic"
+  study_area_ids: [
+   1
+  ]
