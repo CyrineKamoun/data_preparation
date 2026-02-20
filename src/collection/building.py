@@ -19,7 +19,27 @@ class OSMBuildingCollection(OSMCollection):
     def building_collection(self, db: Database):
         """Collects all building from OSM"""
 
-        osm_filter = '--keep="building=" --drop-nodes --drop-relations'
+        # Create OSM filter for buildings - same logic as POI collection
+        osm_filter = ""
+        if self.data_config.collection["osm_tags"]:
+            for tag in self.data_config.collection["osm_tags"]:
+                if self.data_config.collection["osm_tags"][tag]:
+                    for tag_value in self.data_config.collection["osm_tags"][tag]:
+                        osm_filter += tag + "=" + tag_value + " "
+                else:
+                    osm_filter += tag + " "
+
+        if osm_filter:
+            osm_filter = '--keep="' + osm_filter + '"'
+
+        # Remove not needed osm feature categories
+        if self.data_config.collection["nodes"] == False:
+            osm_filter += "--drop-nodes "
+        if self.data_config.collection["ways"] == False:
+            osm_filter += "--drop-ways "
+        if self.data_config.collection["relations"] == False:
+            osm_filter += "--drop-relations "
+
         self.download_bulk_osm()
         self.prepare_bulk_osm(osm_filter=osm_filter)
         self.merge_osm_and_import()

@@ -1,10 +1,11 @@
 region_pbf : [
-    "https://download.geofabrik.de/europe/albania-latest.osm.pbf",
+ region_pbf : [
+  "https://download.geofabrik.de/europe/albania-latest.osm.pbf",
   "https://download.geofabrik.de/europe/andorra-latest.osm.pbf",
-  #"https://download.geofabrik.de/europe/austria-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/austria-latest.osm.pbf",
   "https://download.geofabrik.de/europe/azores-latest.osm.pbf",
   # "https://download.geofabrik.de/europe/belarus-latest.osm.pbf",
-  #"https://download.geofabrik.de/europe/belgium-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/belgium-latest.osm.pbf",
   "https://download.geofabrik.de/europe/bosnia-herzegovina-latest.osm.pbf",
   "https://download.geofabrik.de/europe/bulgaria-latest.osm.pbf",
   "https://download.geofabrik.de/europe/croatia-latest.osm.pbf",
@@ -14,16 +15,12 @@ region_pbf : [
   "https://download.geofabrik.de/europe/estonia-latest.osm.pbf",
   "https://download.geofabrik.de/europe/faroe-islands-latest.osm.pbf",
   "https://download.geofabrik.de/europe/finland-latest.osm.pbf",
-#  "https://download.geofabrik.de/europe/france-latest.osm.pbf",
+
   # "https://download.geofabrik.de/europe/georgia-latest.osm.pbf",
-  #"https://download.geofabrik.de/europe/germany-latest.osm.pbf",
   "https://download.geofabrik.de/europe/greece-latest.osm.pbf",
   "https://download.geofabrik.de/europe/guernsey-jersey-latest.osm.pbf",
   "https://download.geofabrik.de/europe/hungary-latest.osm.pbf",
   "https://download.geofabrik.de/europe/iceland-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/ireland-and-northern-ireland-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/isle-of-man-latest.osm.pbf",
- # "https://download.geofabrik.de/europe/italy-latest.osm.pbf",
   "https://download.geofabrik.de/europe/kosovo-latest.osm.pbf",
   "https://download.geofabrik.de/europe/latvia-latest.osm.pbf",
   "https://download.geofabrik.de/europe/liechtenstein-latest.osm.pbf",
@@ -34,9 +31,23 @@ region_pbf : [
   # "https://download.geofabrik.de/europe/moldova-latest.osm.pbf",
   "https://download.geofabrik.de/europe/monaco-latest.osm.pbf",
   "https://download.geofabrik.de/europe/montenegro-latest.osm.pbf",
-  #"https://download.geofabrik.de/europe/netherlands-latest.osm.pbf",
   "https://download.geofabrik.de/europe/norway-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/poland-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/poland/dolnoslaskie-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/poland/kujawsko-pomorskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/lodzkie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/lubelskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/lubuskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/malopolskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/mazowieckie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/opolskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/podkarpackie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/podlaskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/pomorskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/slaskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/swietokrzyskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/warminsko-mazurskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/wielkopolskie-latest.osm.pbf", 
+  "https://download.geofabrik.de/europe/poland/zachodniopomorskie-latest.osm.pbf",
   "https://download.geofabrik.de/europe/portugal-latest.osm.pbf",
   "https://download.geofabrik.de/europe/romania-latest.osm.pbf",
   # "https://download.geofabrik.de/russia/central-fed-district-latest.osm.pbf",
@@ -51,36 +62,99 @@ region_pbf : [
   "https://download.geofabrik.de/europe/serbia-latest.osm.pbf",
   "https://download.geofabrik.de/europe/slovakia-latest.osm.pbf",
   "https://download.geofabrik.de/europe/slovenia-latest.osm.pbf",
-  "https://download.geofabrik.de/europe/spain-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/andalucia-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/aragon-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/asturias-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/cantabria-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/castilla-la-mancha-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/castilla-y-leon-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/cataluna-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/ceuta-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/extremadura-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/galicia-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/islas-baleares-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/la-rioja-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/madrid-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/melilla-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/murcia-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/navarra-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/pais-vasco-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/spain/valencia-latest.osm.pbf",
   "https://download.geofabrik.de/europe/sweden-latest.osm.pbf",
-#  "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/switzerland-latest.osm.pbf",
   # "https://download.geofabrik.de/europe/turkey-latest.osm.pbf",
   # "https://download.geofabrik.de/europe/ukraine-latest.osm.pbf",
-#  "https://download.geofabrik.de/europe/united-kingdom-latest.osm.pbf"
+  "https://download.geofabrik.de/europe/great-britain/england/bedfordshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/berkshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/bristol-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/buckinghamshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/cambridgeshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/cheshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/cornwall-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/cumbria-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/derbyshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/devon-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/dorset-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/durham-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/east-sussex-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/east-yorkshire-with-hull-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/essex-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/gloucestershire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/greater-london-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/greater-manchester-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/hampshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/hertfordshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/isle-of-wight-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/lancashire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/leicestershire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/lincolnshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/kent-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/merseyside-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/norfolk-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/north-yorkshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/northamptonshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/northumberland-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/nottinghamshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/oxfordshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/rutland-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/shropshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/somerset-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/south-yorkshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/surrey-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/staffordshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/suffolk-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/tyne-and-wear-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/warwickshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/west-midlands-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/west-sussex-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/west-yorkshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/wiltshire-latest.osm.pbf",
+  "https://download.geofabrik.de/europe/great-britain/england/worcestershire-latest.osm.pbf",
+]
 ]
 collection:
   osm_tags:
     amenity: ["atm", "bank", "bar", "biergarten", "bicycle_parking", "bicycle_rental", "bus_station", "cafe", "car_sharing", "charging_station",
               "cinema", "dentist", "doctors", "fast_food", "fuel", "ice_cream", "kneipp_water_cure", "library",
               "marketplace", "nightclub", "pharmacy", "place_of_worship", "planetarium", "post_box", "post_office", "parking", "pub",
-              "recycling", "restaurant", "taxi", "theatre", "vending_machine"]
+              "recycling", "restaurant", "taxi", "theatre", "vending_machine","police", "townhall","community_centre","department_store"]
     shop: ["bakery", "butcher", "chemist", "clothes", "convenience", "deli", "farm", "fashion", "florist", "fuel", "general",
            "greengrocer", "grocery", "hairdresser", "health_food", "honey", "kiosk", "mall", "shoes", "sports",
-           "supermarket", "wine"]
+           "supermarket", "wine","books"]
     tourism: ["alpine_hut", "apartment", "aquarium", "camp_site", "caravan_site", "chalet", "gallery", "guest_house",
                "hostel", "hotel", "motel", "museum", "theme_park", "zoo"]
     railway: ["platform", "station", "stop", "subway_entrance", "tram_stop"]
     leisure: ["amusement_arcade", "disc_golf_course", "dog_park", "escape_game", "fitness_centre", "fitness_station",
-              "miniature_golf", "playground", "sports_centre", "sports_hall", "swimming_area", "water_park"]
+              "miniature_golf", "playground", "sports_centre", "sports_hall", "swimming_area", "water_park","swimmning_pool"]
     sport: ["fitness", "swimming", "yoga"]
     highway: ["bus_stop"]
     public_transport: ["station", "stop_position"]
     historic: ["aircraft", "aqueduct", "archaeological_site", "battlefield", "bomb_crater", "castle", "church",
                "city_gate", "citywalls", "fort", "locomotive", "memorial", "monastery", "monument",
                "railway_car", "ruins", "ship", "tank", "tomb", "tower", "vehicle", "wreck"]
-
+    building: ["public", "townhall"]
   additional_columns: ["name", "operator", "addr:street","addr:housenumber", "addr:postcode", "addr:city", "addr:country", "phone", "email", "website", 
-                       "capacity", "opening_hours", "wheelchair", "origin", "organic", "subway", "brand"]
+                       "capacity", "opening_hours", "wheelchair", "origin", "organic", "subway", "brand", "indoor", "outdoor"]
   nodes : True
   ways : True
   relations : True
@@ -131,7 +205,7 @@ validation:
           pharmacy: [-0.3, 0.3]
       lower_bound: 3
 
-   
+  
 subscription:
   repo_url: "https://github.com/plan4better/pois"
   merged_categories:

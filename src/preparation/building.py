@@ -81,6 +81,7 @@ class BuildingPreparation:
                             WHERE {classification_data} IN ({str(value)[1:-1]});
                             {sql_insert % (column_name, column_name)}
                             """
+                        self.db.perform(sql_classify)
                     
                         
                     

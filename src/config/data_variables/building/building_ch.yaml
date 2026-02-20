@@ -5,7 +5,7 @@ region_pbf:
 
 collection:
   osm_tags:
-    building: [True]
+    building: ["*"]
   additional_columns:
     [
       "amenity",
@@ -42,11 +42,21 @@ preparation:
           query: "SELECT count(*) AS count FROM poi_osm_ch p"
           value: "'no_residents'"
           count: 5
+        
+        building_type_residential:
+          query: "SELECT count(*) AS count FROM building_type_ch p WHERE buildingcategory in (1020,1030,1040)"
+          value: "'with_residents'"
+          count: 1
+        building_type_residential:
+          query: "SELECT count(*) AS count FROM building_type_ch p WHERE buildingcategory in(1060, 1080)"
+          value: "'no_residents'"
+          count: 1
+
 
       attribute:
         building_type:
           with_residents:
-              [ "Gebaeude Einzelhaus","Hochhaus"]
+              [""]
           no_residents:
              [  "Bruecke gedeckt",
                "Flugdach",

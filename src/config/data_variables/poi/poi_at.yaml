@@ -6,24 +6,25 @@ collection:
     amenity: ["atm", "bank", "bar", "biergarten", "bicycle_parking", "bicycle_rental", "bus_station", "cafe", "car_sharing", "charging_station",
               "cinema", "dentist", "doctors", "fast_food", "fuel", "ice_cream", "kneipp_water_cure", "library",
               "marketplace", "nightclub", "pharmacy", "place_of_worship", "planetarium", "post_box", "post_office", "parking", "pub",
-              "recycling", "restaurant", "taxi", "theatre", "vending_machine"]
+              "recycling", "restaurant", "taxi", "theatre", "vending_machine","police", "townhall","community_centre","department_store"]
+              
     shop: ["bakery", "butcher", "chemist", "clothes", "convenience", "deli", "farm", "fashion", "florist", "fuel", "general",
            "greengrocer", "grocery", "hairdresser", "health_food", "honey", "kiosk", "mall", "shoes", "sports",
-           "supermarket", "wine"]
+           "supermarket", "wine","books"]
     tourism: ["alpine_hut", "apartment", "aquarium", "camp_site", "caravan_site", "chalet", "gallery", "guest_house",
                "hostel", "hotel", "motel", "museum", "theme_park", "zoo"]
     railway: ["platform", "station", "stop", "subway_entrance", "tram_stop"]
     leisure: ["amusement_arcade", "disc_golf_course", "dog_park", "escape_game", "fitness_centre", "fitness_station",
-              "miniature_golf", "playground", "sports_centre", "sports_hall", "swimming_area", "water_park"]
+              "miniature_golf", "playground", "sports_centre", "sports_hall", "swimming_area", "water_park","swimmning_pool"]
     sport: ["fitness", "swimming", "yoga"]
     highway: ["bus_stop"]
     public_transport: ["station", "stop_position"]
     historic: ["aircraft", "aqueduct", "archaeological_site", "battlefield", "bomb_crater", "castle", "church",
                "city_gate", "citywalls", "fort", "locomotive", "memorial", "monastery", "monument",
                "railway_car", "ruins", "ship", "tank", "tomb", "tower", "vehicle", "wreck"]
-
+    building: ["public", "townhall"]
   additional_columns: ["name", "operator", "addr:street","addr:housenumber", "addr:postcode", "addr:city", "addr:country", "phone", "email", "website", 
-                       "capacity", "opening_hours", "wheelchair", "origin", "organic", "subway", "brand"]
+                       "capacity", "opening_hours", "wheelchair", "origin", "organic", "subway", "brand", "indoor", "outdoor"]
   nodes : True
   ways : True
   relations : True
@@ -141,6 +142,8 @@ preparation:
     inherit: "supermarket"
   deli: 
     inherit: "supermarket"
+  
+
   
 subscription:
   repo_url: "https://github.com/plan4better/pois"
