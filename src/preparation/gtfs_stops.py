@@ -26,6 +26,7 @@ class GTFSStopsPreparation:
             705: "Night Bus Service",
             710: "Sightseeing Bus",
             712: "School Bus",
+            713: "School and Public Service Bus",
             715: "Demand and Response Bus Service",
             800: "Trolleybus Service",
         },

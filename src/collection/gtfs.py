@@ -307,7 +307,7 @@ class GTFSCollection:
         id_mappings = {
             "agency": {"agency_id"},
             "routes": {"route_id", "agency_id"},
-            "trips": {"trip_id", "route_id", "service_id", "shape_id", "block_id"},
+            "trips": {"trip_id", "route_id", "service_id", "shape_id"},
             "stops": {"stop_id", "parent_station"},
             "stop_times": {"trip_id", "stop_id"},
             "shapes": {"shape_id"},

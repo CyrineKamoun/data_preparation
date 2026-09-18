@@ -63,7 +63,6 @@ class GtfsTables:
                 trip_headsign text NULL,
                 trip_short_name text NULL,
                 direction_id int4 NULL,
-                block_id text NULL,
                 shape_id text NULL,
                 wheelchair_accessible text NULL,
                 bikes_allowed text NULL
@@ -149,7 +148,7 @@ class GtfsTables:
         """
 
         sql_select_table_trips = f"""
-            SELECT route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, trip_id, wheelchair_accessible, bikes_allowed
+            SELECT route_id, service_id, trip_headsign, trip_short_name, direction_id, shape_id, trip_id, wheelchair_accessible, bikes_allowed
             FROM {self.schema}.trips
         """
 
