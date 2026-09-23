@@ -1,15 +1,19 @@
 preparation:
-    local_gtfs_schema: "gtfs_de_20250407"
+    local_gtfs_schema: "gtfs_combined"
 
     region: | 
         WITH 
         bounds AS (
-            SELECT ST_Extent(geom) AS geom FROM public.nuts WHERE nuts_id = 'DE'
+            SELECT ST_Extent(geom) AS geom
+            FROM public.nuts
+            WHERE (cntr_code IN ('DE', 'CH') AND levl_code = '0')
+            OR (nuts_name IN ('Haut-Rhin'))
         ),
         merged_geometries AS (
             SELECT ST_Union(geom) AS geom
-            FROM public.nuts 
-            WHERE nuts_id = 'DE'
+            FROM public.nuts
+            WHERE (cntr_code IN ('DE', 'CH') AND levl_code = '0')
+            OR (nuts_name IN ('Haut-Rhin'))
         ),
         grid AS (
             SELECT ST_MakeEnvelope(
@@ -29,11 +33,3 @@ preparation:
             JOIN grid g ON ST_Intersects(m.geom, g.geom)
         )
         SELECT geom FROM intersections WHERE ST_GeometryType(geom) = 'ST_Polygon'
-
-    classification:
-        station_categories:
-            "bus": "bus_stop"
-            "tram": "tram_stop"
-            "metro": "subway_station"
-            "rail": "rail_station"
-            "other": "other"

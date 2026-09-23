@@ -7,7 +7,7 @@ from src.collection.gtfs import collect_gtfs
 from src.collection.landuse import collect_landuse
 from src.collection.network import collect_network
 from src.collection.osm_pt_lines import collect_osm_pt_lines
-from src.collection.overture import collect_overture
+# from src.collection.overture import collect_overture
 from src.collection.poi import collect_poi
 from src.core.config import settings
 from src.db.db import Database
@@ -16,6 +16,9 @@ from src.fusion.poi_osm_overture import fusion_poi_osm_overture
 from src.migration.gtfs import migrate_gtfs
 from src.preparation.building import prepare_building
 from src.preparation.gtfs import prepare_gtfs
+from src.preparation.gtfs_combine import prepare_gtfs_combine
+from src.preparation.gtfs_demand_routes import prepare_gtfs_demand_routes
+from src.preparation.gtfs_parent_stations import prepare_gtfs_parent_stations
 from src.preparation.gtfs_stations import prepare_gtfs_stations
 from src.preparation.gtfs_stops import prepare_gtfs_stops
 from src.preparation.network import export_network, prepare_network
@@ -43,7 +46,7 @@ action_dict = {
         "landuse": collect_landuse,
         "network": collect_network,
         "gtfs": collect_gtfs,
-        "overture": collect_overture,
+        # "overture": collect_overture,
         "osm_pt_lines": collect_osm_pt_lines,
     },
     "preparation": {
@@ -56,6 +59,9 @@ action_dict = {
         "gtfs": prepare_gtfs,
         "overture_street_network": prepare_overture_street_network,
         "overture": prepare_overture_division_area,
+        "gtfs_parent_stations": prepare_gtfs_parent_stations,
+        "gtfs_demand_routes": prepare_gtfs_demand_routes,
+        "gtfs_combine": prepare_gtfs_combine,
         "gtfs_stops": prepare_gtfs_stops,
         "gtfs_stations": prepare_gtfs_stations,
         "osm_pt_lines": prepare_osm_pt_lines,
@@ -75,6 +81,14 @@ action_dict = {
     "validation": {
         "poi": validate_poi
     }
+}
+
+
+# Datasets that reuse another dataset's YAML config files instead of having their own
+config_aliases = {
+    "gtfs_parent_stations": "gtfs",
+    "gtfs_demand_routes": "gtfs",
+    "gtfs_combine": "gtfs",
 }
 
 
@@ -145,7 +159,8 @@ def run(
                 print_hashtags()
 
                 if region is not None:
-                    check_config_file_exists(data_set=dataset, region=region)
+                    config_dataset = config_aliases.get(dataset, dataset)
+                    check_config_file_exists(data_set=config_dataset, region=region)
                     action_dict[action][dataset](region=region)
                 else:
                     action_dict[action][dataset]()

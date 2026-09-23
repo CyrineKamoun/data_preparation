@@ -16,12 +16,17 @@ class GTFSStationsPreparation:
         "bus": {
             3: "Bus",
             11: "Trolleybus",
+            201: "International Coach Service",
+            202: "National Coach Service",
+            204: "Regional Coach Service",
+            300: "Demand and Response Bus Service",
             700: "Bus Service",
             702: "Express Bus Service",
             704: "Local Bus Service",
             705: "Night Bus Service",
             710: "Sightseeing Bus",
             712: "School Bus",
+            713: "School and Public Service Bus",
             715: "Demand and Response Bus Service",
             800: "Trolleybus Service",
         },
@@ -46,7 +51,8 @@ class GTFSStationsPreparation:
             106: "Regional Rail Service",
             107: "Tourist Railway Service",
             109: "Suburban Railway",
-            202: "National Coach Service",
+            116: "Rack and Pinion Railway",
+            117: "Additional Rail Service",
             403: "All Urban Railway Services",
         },
         "other": {
@@ -55,6 +61,7 @@ class GTFSStationsPreparation:
             7: "Funicular",
             1000: "Water Transport Service",
             1300: "Aerial Lift Service",
+            1303: "Elevator Service",
             1400: "Funicular Service",
             1500: "Taxi Service",
             1700: "Gondola, Suspended cable car",
@@ -95,7 +102,7 @@ class GTFSStationsPreparation:
             ts = time.time()
 
             classify_gtfs_stop_sql = f"""
-                INSERT INTO {result_table} (stop_id, category, name, modes, source, geom)
+                INSERT INTO {result_table} (stop_id, name, category, bus, tram, metro, rail, other, geom)
                 WITH parent_stations AS (
                     SELECT s.stop_id AS station_id, s.stop_name AS station_name, s.geom AS station_geom
                     FROM {self.gtfs_schema}.stops s
@@ -112,7 +119,7 @@ class GTFSStationsPreparation:
                     FROM clipped_gfts_stops c
                     CROSS JOIN LATERAL
                     (
-                        SELECT DISTINCT o.route_type
+                        SELECT DISTINCT ON (o.route_type, o.h3_3) o.route_type
                         FROM {self.gtfs_schema}.stop_times_optimized o
                         WHERE o.stop_id = c.stop_id
                         AND o.h3_3 = c.h3_3
@@ -120,17 +127,27 @@ class GTFSStationsPreparation:
                     ) j
                 )
                 SELECT
-                    station_id as stop_id,
-                    '{json.dumps(self.data_config_preparation['classification']['station_categories'])}'::jsonb ->> basic.identify_dominant_mode(
-                        ARRAY_AGG(DISTINCT route_type),
-                        '{json.dumps(flat_mode_mapping)}'::JSONB
-                    ) AS category,
-                    station_name AS name,
-                    ARRAY_AGG(DISTINCT '{json.dumps(flat_mode_mapping)}'::JSONB ->> route_type) AS modes,
-                    'DELFI' AS source,
-                    station_geom AS geom
-                FROM categorized_gtfs_stops
-                GROUP BY station_id, station_name, station_geom;
+                    stop_id,
+                    name,
+                    ARRAY_TO_STRING(modes, '_') AS category,
+                    CASE WHEN 'bus' = ANY(modes) THEN 'Yes' ELSE 'No' END AS bus,
+                    CASE WHEN 'tram' = ANY(modes) THEN 'Yes' ELSE 'No' END AS tram,
+                    CASE WHEN 'metro' = ANY(modes) THEN 'Yes' ELSE 'No' END AS metro,
+                    CASE WHEN 'rail' = ANY(modes) THEN 'Yes' ELSE 'No' END AS rail,
+                    CASE WHEN 'other' = ANY(modes) THEN 'Yes' ELSE 'No' END AS other,
+                    geom
+                FROM (
+                    SELECT
+                        station_id AS stop_id,
+                        station_name AS name,
+                        ARRAY_AGG(
+                            DISTINCT '{json.dumps(flat_mode_mapping)}'::JSONB ->> route_type
+                            ORDER BY '{json.dumps(flat_mode_mapping)}'::JSONB ->> route_type
+                        ) AS modes,
+                        station_geom AS geom
+                    FROM categorized_gtfs_stops
+                    GROUP BY station_id, station_name, station_geom
+                ) sub;
             """
 
             self.db.perform(classify_gtfs_stop_sql)
@@ -145,7 +162,7 @@ class GTFSStationsPreparation:
             ts = time.time()
 
             classify_gtfs_stop_sql = f"""
-                INSERT INTO {result_table} (stop_id, category, name, modes, source, geom)
+                INSERT INTO {result_table} (stop_id, name, category, bus, tram, metro, rail, other, geom)
                 WITH clipped_gfts_stops AS (
                     SELECT stop_id, stop_name, geom, h3_3
                     FROM {self.gtfs_schema}.stops
@@ -157,7 +174,7 @@ class GTFSStationsPreparation:
                     FROM clipped_gfts_stops c
                     CROSS JOIN LATERAL
                     (
-                        SELECT DISTINCT o.route_type
+                        SELECT DISTINCT ON (o.route_type, o.h3_3) o.route_type
                         FROM {self.gtfs_schema}.stop_times_optimized o
                         WHERE o.stop_id = c.stop_id
                         AND o.h3_3 = c.h3_3
@@ -165,17 +182,27 @@ class GTFSStationsPreparation:
                     ) j
                 )
                 SELECT
-                    'new_station' AS stop_id,
-                    '{json.dumps(self.data_config_preparation['classification']['station_categories'])}'::jsonb ->> basic.identify_dominant_mode(
-                        ARRAY_AGG(DISTINCT route_type),
-                        '{json.dumps(flat_mode_mapping)}'::JSONB
-                    ) AS category,
-                    stop_name AS name,
-                    ARRAY_AGG(DISTINCT '{json.dumps(flat_mode_mapping)}'::JSONB ->> route_type) AS modes,
-                    'DELFI' AS source,
-                    ST_Centroid(ST_Collect(geom)) AS geom
-                FROM categorized_gtfs_stops
-                GROUP BY stop_name;
+                    stop_id,
+                    name,
+                    ARRAY_TO_STRING(modes, '_') AS category,
+                    CASE WHEN 'bus' = ANY(modes) THEN 'Yes' ELSE 'No' END AS bus,
+                    CASE WHEN 'tram' = ANY(modes) THEN 'Yes' ELSE 'No' END AS tram,
+                    CASE WHEN 'metro' = ANY(modes) THEN 'Yes' ELSE 'No' END AS metro,
+                    CASE WHEN 'rail' = ANY(modes) THEN 'Yes' ELSE 'No' END AS rail,
+                    CASE WHEN 'other' = ANY(modes) THEN 'Yes' ELSE 'No' END AS other,
+                    geom
+                FROM (
+                    SELECT
+                        'new_station' AS stop_id,
+                        stop_name AS name,
+                        ARRAY_AGG(
+                            DISTINCT '{json.dumps(flat_mode_mapping)}'::JSONB ->> route_type
+                            ORDER BY '{json.dumps(flat_mode_mapping)}'::JSONB ->> route_type
+                        ) AS modes,
+                        ST_Centroid(ST_Collect(geom)) AS geom
+                    FROM categorized_gtfs_stops
+                    GROUP BY stop_name
+                ) sub;
             """
 
             self.db.perform(classify_gtfs_stop_sql)

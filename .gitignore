@@ -13,3 +13,5 @@ importer/temp/
 poetry.lock
 
 nohup.out
+
+.DS_Store

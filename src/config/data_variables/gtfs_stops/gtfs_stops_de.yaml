@@ -1,5 +1,5 @@
 preparation:
-    local_gtfs_schema: "gtfs_de_20250512"
+    local_gtfs_schema: "gtfs_de_20250407"
 
     region: | 
         WITH 

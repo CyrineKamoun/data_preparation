@@ -1,3 +1,4 @@
+import hashlib
 import os
 import subprocess
 
@@ -20,6 +21,32 @@ class GTFSCollection:
         gtfs_tables = GtfsTables(self.schema)
         self.create_queries = gtfs_tables.sql_create_table()
 
+    def get_dataset_prefix(self, dataset_name: str) -> str:
+        """Generate a unique prefix for dataset IDs."""
+        # Create a short hash from dataset name for uniqueness
+        hash_object = hashlib.md5(dataset_name.encode())
+        return hash_object.hexdigest()[:8]
+
+    def get_dataset_subdirectories(self) -> list:
+        """Get all subdirectories in the network_dir that contain GTFS files."""
+        base_dir = os.path.join(settings.INPUT_DATA_DIR, "gtfs", self.network_dir)
+        subdirs = []
+
+        if not os.path.exists(base_dir):
+            print_info(f"Base directory {base_dir} does not exist")
+            return []
+
+        for item in os.listdir(base_dir):
+            item_path = os.path.join(base_dir, item)
+            if os.path.isdir(item_path):
+                # Check if directory contains any GTFS files
+                gtfs_files = [f for f in os.listdir(item_path) if f.endswith('.txt')]
+                if gtfs_files:
+                    subdirs.append(item)
+
+        print_info(f"Found {len(subdirs)} GTFS dataset directories: {subdirs}")
+        return subdirs
+
     def create_table_schema(self):
         """Create the schema for the gtfs data."""
 
@@ -40,28 +67,33 @@ class GTFSCollection:
 
         print_info("Create tables for gtfs data.")
 
-
         for table in self.create_queries:
             self.db.perform(self.create_queries[table])
 
         # Make stop, stop_times and shapes distributed
-        distributed_tables = ["stop_times", "shapes", "stops"]
-        print_info(f"Distribute tables using CITUS: {distributed_tables}")
-        for table in distributed_tables:
-            sql_make_table_distributed = f"SELECT create_distributed_table('{self.schema}.{table}', 'h3_3');"
-            self.db.perform(sql_make_table_distributed)
+        # TODO: Check if distribution is actually required
+        # distributed_tables = ["stop_times", "shapes", "stops"]
+        # print_info(f"Distribute tables using CITUS: {distributed_tables}")
+        # for table in distributed_tables:
+        #     sql_make_table_distributed = f"SELECT create_distributed_table('{self.schema}.{table}', 'h3_3');"
+        #     self.db.perform(sql_make_table_distributed)
 
 
-    def split_file(self, table: str, output_dir: str):
+    def split_file(self, table: str, output_dir: str, dataset_subdir: str):
         """Split file into chunks and removes header."""
 
-        input_file = os.path.join(settings.INPUT_DATA_DIR, "gtfs", self.network_dir, table + ".txt")
+        input_file = os.path.join(settings.INPUT_DATA_DIR, "gtfs", self.network_dir, dataset_subdir, table + ".txt")
         print_info(
             f"Split file {input_file} into chunks of max. {self.chunk_size} rows."
         )
 
+        # Check if file exists
+        if not os.path.exists(input_file):
+            print_info(f"File {input_file} does not exist, skipping table {table} for dataset {dataset_subdir}")
+            return None, None
+
         # Read header to define column order and remove header afterwards from file
-        with open(input_file, "r") as f:
+        with open(input_file, "r", encoding="utf-8-sig") as f:
             header = f.readline().strip().replace('"', '').split(",")
 
         # Check if header is same as column of table
@@ -83,9 +115,6 @@ class GTFSCollection:
         excess_columns = set(header) - set(columns)
         if excess_columns:
             print_info(f"Columns {excess_columns} are missing in table {table} but are in the gtfs file. Continuing with table columns only.")
-            """raise ValueError(
-                f"Columns {excess_columns} are missing in table {table} that are in the gtfs file. Import stopped."
-            )"""
 
         # Split file into chunks and use file name as prefix
         subprocess.run(
@@ -102,15 +131,15 @@ class GTFSCollection:
         first_file = os.path.join(output_dir, table + "_aa")
 
         # Remove header from the first file
-        with open(first_file, "r", encoding="utf-8", errors="ignore") as f:
+        with open(first_file, "r", encoding="utf-8-sig", errors="ignore") as f:
             lines = f.readlines()
         with open(first_file, "w", encoding="utf-8") as f:
             f.writelines(lines[1:])
 
-        # Clean all split files to remove invalid UTF-8 characters
+        # Clean all split files to remove invalid UTF-8 characters and BOM
         for temp_file in os.listdir(output_dir):
             temp_file_path = os.path.join(output_dir, temp_file)
-            with open(temp_file_path, "r", encoding="utf-8", errors="ignore") as f:
+            with open(temp_file_path, "r", encoding="utf-8-sig", errors="ignore") as f:
                 lines = f.readlines()
             with open(temp_file_path, "w", encoding="utf-8") as f:
                 f.writelines(lines)
@@ -118,11 +147,11 @@ class GTFSCollection:
 
         return header, columns
 
-    def import_file(self, input_dir: str, table: str, header: list, table_columns: list):
-        """Import file into database using copy."""
+    def import_file(self, input_dir: str, table: str, header: list, table_columns: list, dataset_prefix: str, dataset_subdir: str):
+        """Import file into database using copy with prefixed IDs."""
 
         files = os.listdir(input_dir)
-        print_info(f"Importing {len(files)} files for table {table}.")
+        print_info(f"Importing {len(files)} files for table {table} from dataset {dataset_subdir}.")
         cnt = 0
         # Loop over all files and import them one by one
         for file in files:
@@ -156,7 +185,7 @@ class GTFSCollection:
                 self.db.perform(sql_update_column_type)
 
             # Copy data to temp table
-            file_path_postgres = os.path.join("/tmp/gtfs", self.network_dir, "temp", file)
+            file_path_postgres = os.path.join("/tmp/gtfs", self.network_dir, dataset_subdir, "temp", file)
             sql_copy = f"""
                 COPY {self.schema}.{table}_temp ({",".join(header)}) FROM '{file_path_postgres}'
                 CSV DELIMITER ',' QUOTE '"' ESCAPE '"' ENCODING 'UTF8';
@@ -165,25 +194,63 @@ class GTFSCollection:
 
             # Get list of only the data columns that we use
             output_cols = set(table_columns) - (set(table_columns) - set(header))
-            output_cols_formatted = ",".join(output_cols)
+
+            # Add dataset_source column if not exists
+            try:
+                self.db.perform(f"ALTER TABLE {self.schema}.{table} ADD COLUMN IF NOT EXISTS dataset_source text;")
+            except Exception:
+                pass  # Column might already exist
+
+            # Create column mappings with prefixed IDs for relevant columns
+            id_columns = self.get_id_columns(table)
+            select_cols = []
+            for col in output_cols:
+                if col in id_columns:
+                    select_cols.append(f"'{dataset_prefix}_' || {col} AS {col}")
+                else:
+                    select_cols.append(col)
+
+            # Add dataset source
+            select_cols.append(f"'{dataset_subdir}' AS dataset_source")
+            select_statement = ", ".join(select_cols)
+
+            # Update output_cols to include dataset_source
+            output_cols_with_source = list(output_cols) + ["dataset_source"]
 
             # Check if table not shapes or stops
             if table not in ["shapes", "stops", "stop_times"]:
-                # Copy data directly from temp table to table
+                # Copy data directly from temp table to table with prefixed IDs
                 sql_copy = f"""
-                    INSERT INTO {self.schema}.{table} ({output_cols_formatted})
-                    SELECT {output_cols_formatted}
+                    INSERT INTO {self.schema}.{table} ({",".join(output_cols_with_source)})
+                    SELECT {select_statement}
                     FROM {self.schema}.{table}_temp;
                 """
             elif table == "shapes":
-                # Copy data and create geometry
+                # Copy data and create geometry with prefixed shape_id
+                shape_cols_with_prefix = []
+                for col in output_cols:
+                    if col in id_columns:
+                        shape_cols_with_prefix.append(f"'{dataset_prefix}_' || {col}")
+                    else:
+                        shape_cols_with_prefix.append(col)
+
                 sql_copy = f"""
-                    INSERT INTO {self.schema}.{table} ({output_cols_formatted}, geom, h3_3)
-                    SELECT {output_cols_formatted}, ST_SetSRID(ST_MakePoint(shape_pt_lon, shape_pt_lat), 4326) AS geom,
-                    basic.to_short_h3_3(h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(shape_pt_lon, shape_pt_lat), 4326)::point, 3)::bigint) AS h3_3
+                    INSERT INTO {self.schema}.{table} ({",".join(output_cols)}, geom, h3_3, dataset_source)
+                    SELECT {", ".join(shape_cols_with_prefix)},
+                           ST_SetSRID(ST_MakePoint(shape_pt_lon, shape_pt_lat), 4326) AS geom,
+                           basic.to_short_h3_3(h3_lat_lng_to_cell(ST_SetSRID(ST_MakePoint(shape_pt_lon, shape_pt_lat), 4326)::point, 3)::bigint) AS h3_3,
+                           '{dataset_subdir}' AS dataset_source
                     FROM {self.schema}.{table}_temp;
                 """
             elif table == "stops":
+                # Get columns with proper prefixing for stops
+                stops_cols_with_prefix = []
+                for col in output_cols:
+                    if col in id_columns:
+                        stops_cols_with_prefix.append(f"'{dataset_prefix}_' || {col}")
+                    else:
+                        stops_cols_with_prefix.append(col)
+
                 sql_copy = f"""
                     ALTER TABLE {self.schema}.{table}_temp ADD COLUMN h3_3 int;
 
@@ -201,8 +268,8 @@ class GTFSCollection:
                     )
                     WHERE h3_3 IS NULL;
 
-                    INSERT INTO {self.schema}.{table} ({output_cols_formatted}, geom, h3_3)
-                    SELECT {output_cols_formatted}, ST_SetSRID(ST_MakePoint(stop_lon::float4, stop_lat::float4), 4326) AS geom, h3_3
+                    INSERT INTO {self.schema}.{table} ({",".join(output_cols)}, geom, h3_3, dataset_source)
+                    SELECT {", ".join(stops_cols_with_prefix)}, ST_SetSRID(ST_MakePoint(stop_lon::float4, stop_lat::float4), 4326) AS geom, h3_3, '{dataset_subdir}' AS dataset_source
                     FROM {self.schema}.{table}_temp;
                 """
             elif table == "stop_times":
@@ -210,14 +277,19 @@ class GTFSCollection:
                 self.db.perform(f"ALTER TABLE {self.schema}.{table}_temp SET LOGGED;")
                 self.db.perform(f"CREATE INDEX ON {self.schema}.{table}_temp (stop_id);")
 
-                # Get h3_3 from stops table
-                columns = ", t.".join(output_cols)
-                columns = "t." + columns
+                # Get h3_3 from stops table with prefixed stop_id
+                columns_with_prefix = []
+                for col in output_cols:
+                    if col in id_columns:
+                        columns_with_prefix.append(f"'{dataset_prefix}_' || t.{col}")
+                    else:
+                        columns_with_prefix.append(f"t.{col}")
+
                 sql_copy = f"""
-                    INSERT INTO {self.schema}.{table} ({output_cols_formatted}, h3_3)
-                    SELECT {columns}, s.h3_3
+                    INSERT INTO {self.schema}.{table} ({",".join(output_cols)}, h3_3, dataset_source)
+                    SELECT {", ".join(columns_with_prefix)}, s.h3_3, '{dataset_subdir}' AS dataset_source
                     FROM {self.schema}.{table}_temp t
-                    LEFT JOIN {self.schema}.stops s ON t.stop_id = s.stop_id;
+                    LEFT JOIN {self.schema}.stops s ON s.stop_id = '{dataset_prefix}_' || t.stop_id;
                 """
             self.db.perform(sql_copy)
 
@@ -229,6 +301,20 @@ class GTFSCollection:
 
         # Make table logged
         self.db.perform(f"ALTER TABLE {self.schema}.{table} SET LOGGED;")
+
+    def get_id_columns(self, table: str) -> set:
+        """Get the ID columns that need prefixing for each table."""
+        id_mappings = {
+            "agency": {"agency_id"},
+            "routes": {"route_id", "agency_id"},
+            "trips": {"trip_id", "route_id", "service_id", "shape_id"},
+            "stops": {"stop_id", "parent_station"},
+            "stop_times": {"trip_id", "stop_id"},
+            "shapes": {"shape_id"},
+            "calendar": {"service_id"},
+            "calendar_dates": {"service_id"},
+        }
+        return id_mappings.get(table, set())
 
     def create_indices(self, table: str):
         """Make tables distributed using CITUS and create indices."""
@@ -282,24 +368,46 @@ class GTFSCollection:
 
 
     def run(self):
-        """Run the gtfs collection."""
+        """Run the gtfs collection for all datasets in subdirectories."""
         self.create_table_schema()
 
-        # Check if for all table there is a gtfs file
+        # Get all dataset subdirectories
+        dataset_subdirs = self.get_dataset_subdirectories()
 
+        if not dataset_subdirs:
+            print_info("No GTFS datasets found in subdirectories.")
+            return
+
+        # Process each dataset
+        for dataset_subdir in dataset_subdirs:
+            print_info(f"Processing dataset: {dataset_subdir}")
+            dataset_prefix = self.get_dataset_prefix(dataset_subdir)
+            print_info(f"Using prefix: {dataset_prefix}")
+
+            # Process each table for this dataset
+            for table in self.create_queries:
+                # Create temp dir for this dataset
+                temp_dir = os.path.join(settings.INPUT_DATA_DIR, "gtfs", self.network_dir, dataset_subdir, "temp")
+                replace_dir(temp_dir)
+
+                # Split file into chunks
+                header, table_columns = self.split_file(table, temp_dir, dataset_subdir)
+
+                # Skip if file doesn't exist
+                if header is None:
+                    continue
+
+                # Import file into database with prefixed IDs
+                self.import_file(temp_dir, table, header, table_columns, dataset_prefix, dataset_subdir)
+
+        # Create indices after all data is imported
+        print_info("Creating indices for all tables...")
         for table in self.create_queries:
-            file_dir = os.path.join(settings.INPUT_DATA_DIR, "gtfs", self.network_dir, table + ".txt")
-            if not os.path.exists(file_dir):
-                raise Exception(f"File {file_dir} not found.")
-
-            # Create temp dir
-            temp_dir = os.path.join(settings.INPUT_DATA_DIR, "gtfs", self.network_dir, "temp")
-            replace_dir(temp_dir)
-            # Split file into chunks
-            header, table_columns = self.split_file(table, temp_dir)
-            # Import file into database
-            self.import_file(temp_dir, table, header, table_columns)
-            self.create_indices(table)
+            try:
+                self.create_indices(table)
+            except Exception as e:
+                print_info(f"Warning: Could not create indices for {table}: {e}")
+                # Continue with other tables
 
 
 

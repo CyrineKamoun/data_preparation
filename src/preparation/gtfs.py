@@ -16,108 +16,20 @@ class GTFS:
 
 
     @timing
-    def prepare_shape_dist_region(self):
-        """Prepare distance travelled of the gtfs shapes per specified region."""
-
-        # Create result table
-        sql_create_shape_dist_region = f"""
-        DROP TABLE IF EXISTS {self.schema}.shape_dist_region;
-        CREATE TABLE {self.schema}.shape_dist_region
-        (
-            region_id TEXT,
-            shape_id TEXT,
-            shape_dist_traveled float,
-            h3_3 integer
-        );
-        SELECT create_distributed_table('{self.schema}.shape_dist_region', 'h3_3');
-        """
-        self.db.perform(sql_create_shape_dist_region)
-
-        # Get region ids and names
-        regions = self.db.select(self.config.preparation["regions_query"])
-        cnt_regions = len(regions)
-        cnt = 0
-
-        # Loop through regions and calculate shape_dist_traveled
-        for region in regions:
-            cnt += 1
-            id, name = region[0], region[1]
-
-            # Create temporary table with region
-            sql_create_table_region = f"""DROP TABLE IF EXISTS region_subdivided;
-            CREATE TABLE region_subdivided
-            (
-                id TEXT,
-                name TEXT,
-                geom geometry,
-                h3_3 integer
-            );
-            SELECT create_distributed_table('public.region_subdivided', 'h3_3');
-
-            INSERT INTO region_subdivided
-            WITH region AS
-            (
-                SELECT * FROM public.nuts
-                WHERE nuts_id = '{id}' AND nuts_name = '{name}'
-            )
-            ,border_points AS
-            (
-                SELECT ((ST_DUMPPOINTS(geom)).geom)::point AS geom
-                FROM region
-            ),
-            h3_ids AS
-            (
-                SELECT DISTINCT basic.to_short_h3_3(h3_lat_lng_to_cell(geom, 3)::bigint) AS h3_3,
-                ST_SETSRID(h3_cell_to_boundary(h3_lat_lng_to_cell(geom, 3))::geometry, 4326) AS geom
-                FROM border_points
-            )
-            SELECT r.nuts_id, r.nuts_name, ST_SUBDIVIDE(ST_Intersection(h.geom, r.geom), 20) AS geom, h.h3_3
-            FROM h3_ids h, region r;
-            CREATE INDEX ON region_subdivided USING GIST(h3_3, geom);
-            """
-            self.db.perform(sql_create_table_region)
-
-            sql_get_shape_dist_traveled = f"""INSERT INTO {self.schema}.shape_dist_region(region_id, shape_id, shape_dist_traveled, h3_3)
-            SELECT n.id, s.shape_id, max(shape_dist_traveled) - min(shape_dist_traveled) AS shape_dist_traveled, n.h3_3
-            FROM {self.schema}.shapes s, public.region_subdivided n
-            WHERE ST_Intersects(s.geom, n.geom)
-            AND s.h3_3 = n.h3_3
-            GROUP BY n.h3_3, n.id, shape_id;
-            DROP TABLE IF EXISTS region_subdivided; """
-            self.db.perform(sql_get_shape_dist_traveled)
-
-            print_info(f"Finished processing region {name}. There are {cnt} out of {cnt_regions} regions processed.")
-
-        # Create index
-        self.db.perform(f"CREATE INDEX ON {self.schema}.shape_dist_region (h3_3, shape_id);")
-        self.db.perform(f"CREATE INDEX ON {self.schema}.shape_dist_region (h3_3, region_id);")
-
-    @timing
     def prepare_stop_times(self):
         """Prepare stop_times table."""
-
-        # Create undistributed shape_dist_region table
-        self.db.perform(
-            f"""
-            DROP TABLE IF EXISTS {self.schema}.undistributed_shape_dist_region;
-            CREATE TABLE {self.schema}.undistributed_shape_dist_region AS
-            SELECT *
-            FROM {self.schema}.shape_dist_region;
-            CREATE INDEX ON {self.schema}.undistributed_shape_dist_region (shape_id);
-            """
-        )
 
         # Create result table
         sql_create_stop_times_optimized = f"""
             DROP TABLE IF EXISTS {self.schema}.stop_times_optimized;
             CREATE TABLE {self.schema}.stop_times_optimized (
                 id serial4 NOT NULL,
-                trip_id text NULL,
-                route_id text NULL,
-                arrival_time interval NULL,
-                stop_id text NULL,
-                route_type smallint NULL,
-                weekdays _bool NULL,
+                trip_id text NOT NULL,
+                route_id text NOT NULL,
+                arrival_time interval NOT NULL,
+                stop_id text NOT NULL,
+                route_type smallint NOT NULL,
+                weekdays _bool NOT NULL,
                 h3_3 integer NOT NULL
             );
             SELECT create_distributed_table('{self.schema}.stop_times_optimized', 'h3_3');
@@ -421,56 +333,13 @@ class GTFS:
             CREATE INDEX ON {self.schema}.temp_trips_weekday (shape_id);"""
             self.db.perform(sql_create_trips_weekday)
 
-            # Create distributed table for temp_trips_weekday
-            sql_create_temp_trips_weekday_distributed = f"""
-                DROP TABLE IF EXISTS {self.schema}.temp_trips_weekday_distributed;
-                CREATE TABLE {self.schema}.temp_trips_weekday_distributed
-                (
-                    trip_id TEXT,
-                    route_id TEXT,
-                    route_type SMALLINT,
-                    trip_headsign TEXT,
-                    shape_id TEXT,
-                    weekdays bool[],
-                    h3_3 integer
-                );
-                SELECT create_distributed_table('{self.schema}.temp_trips_weekday_distributed', 'h3_3');
-            """
-            self.db.perform(sql_create_temp_trips_weekday_distributed)
-
-            # Insert data into the distributed table
-            sql_insert_temp_trips_weekday_distributed = f"""
-                INSERT INTO {self.schema}.temp_trips_weekday_distributed
-                SELECT t.trip_id, t.route_id, t.route_type::text::smallint, t.trip_headsign, t.shape_id, t.weekdays, j.h3_3
-                FROM {self.schema}.temp_trips_weekday t
-                CROSS JOIN LATERAL
-                (
-                    SELECT DISTINCT s.h3_3
-                    FROM {self.schema}.undistributed_shape_dist_region s
-                    WHERE t.shape_id = s.shape_id
-                ) j;
-                CREATE INDEX ON {self.schema}.temp_trips_weekday_distributed (h3_3, trip_id);
-            """
-            self.db.perform(sql_insert_temp_trips_weekday_distributed)
-
-            # Create temporary table to be cleaned
-            sql_create_stop_times_to_clean = f"""
-                DROP TABLE IF EXISTS {self.schema}.stop_times_to_clean;
-                CREATE TABLE {self.schema}.stop_times_to_clean AS
-                SELECT st.trip_id, st.arrival_time, stop_id, route_type::text::smallint, weekdays, w.route_id, w.trip_headsign, st.h3_3
-                FROM {self.schema}.stop_times st
-                LEFT JOIN {self.schema}.temp_trips_weekday_distributed w
-                ON st.trip_id = w.trip_id
-                WHERE st.h3_3 = w.h3_3;
-            """
-            self.db.perform(sql_create_stop_times_to_clean)
-
-            # Join stop_times with temp_trips_weekday_distributed and insert into stop_times_optimized
+            # Join stop_times with temp_trips_weekday and insert into stop_times_optimized
             sql_insert_stop_times_optimized = f"""
                 INSERT INTO {self.schema}.stop_times_optimized(trip_id, route_id, stop_id, arrival_time, weekdays, route_type,  h3_3)
-                SELECT (ARRAY_AGG(trip_id))[1], (ARRAY_AGG(route_id))[1], stop_id, arrival_time, weekdays, (ARRAY_AGG(route_type))[1],  h3_3
-                FROM {self.schema}.stop_times_to_clean
-                GROUP BY stop_id, arrival_time, weekdays, h3_3;
+                SELECT st.trip_id, w.route_id, stop_id, st.arrival_time, weekdays, route_type::text::smallint, st.h3_3
+                FROM {self.schema}.stop_times st,
+                    {self.schema}.temp_trips_weekday w
+                WHERE st.trip_id = w.trip_id;
             """
             self.db.perform(sql_insert_stop_times_optimized)
 
@@ -482,8 +351,6 @@ class GTFS:
         self.db.perform(f"DROP TABLE IF EXISTS {self.schema}.stop_times_to_clean;")
         self.db.perform(f"DROP TABLE IF EXISTS {self.schema}.dates_max_trips;")
         self.db.perform(f"DROP TABLE IF EXISTS {self.schema}.temp_trips_weekday;")
-        self.db.perform(f"DROP TABLE IF EXISTS {self.schema}.temp_trips_weekday_distributed;")
-        self.db.perform(f"DROP TABLE IF EXISTS {self.schema}.undistributed_shape_dist_region;")
 
     @timing
     def add_indices(self):
@@ -501,7 +368,6 @@ class GTFS:
     def run(self):
         """Run the gtfs preparation."""
 
-        self.prepare_shape_dist_region()
         self.prepare_stop_times()
         self.add_indices()
 

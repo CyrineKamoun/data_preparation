@@ -63,7 +63,6 @@ class GtfsTables:
                 trip_headsign text NULL,
                 trip_short_name text NULL,
                 direction_id int4 NULL,
-                block_id text NULL,
                 shape_id text NULL,
                 wheelchair_accessible text NULL,
                 bikes_allowed text NULL
@@ -118,6 +117,7 @@ class GtfsTables:
             );
         """
 
+        # TODO: Check if using shapes is required
         return {
             "agency": sql_create_table_agency,
             "stops": sql_create_table_stops,
@@ -126,7 +126,7 @@ class GtfsTables:
             "stop_times": sql_create_table_stop_times,
             "calendar": sql_create_table_calendar,
             "calendar_dates": sql_create_table_calendar_dates,
-            "shapes": sql_create_table_shapes
+            # "shapes": sql_create_table_shapes
         }
 
     def sql_select_table(self) -> dict:
@@ -148,7 +148,7 @@ class GtfsTables:
         """
 
         sql_select_table_trips = f"""
-            SELECT route_id, service_id, trip_headsign, trip_short_name, direction_id, block_id, shape_id, trip_id, wheelchair_accessible, bikes_allowed
+            SELECT route_id, service_id, trip_headsign, trip_short_name, direction_id, shape_id, trip_id, wheelchair_accessible, bikes_allowed
             FROM {self.schema}.trips
         """
 
@@ -172,6 +172,7 @@ class GtfsTables:
             FROM {self.schema}.shapes
         """
 
+        # TODO: Check if using shapes is required
         return {
             "agency": sql_select_table_agency,
             "stops": sql_select_table_stops,
@@ -180,5 +181,5 @@ class GtfsTables:
             "stop_times": sql_select_table_stop_times,
             "calendar": sql_select_table_calendar,
             "calendar_dates": sql_select_table_calendar_dates,
-            "shapes": sql_select_table_shapes
+            # "shapes": sql_select_table_shapes
         }

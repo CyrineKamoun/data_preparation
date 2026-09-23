@@ -7,14 +7,15 @@ from src.utils.utils import print_error, print_info
 
 
 def create_db():
-    """Create DataPreparation database."""
-    # Connect to default database
+    """Create data preparation database."""
+
+    # Connect to PostgreSQL server and attempt to create the database
     db_name = settings.POSTGRES_DB
     subprocess.run(["psql", "-U", "rds", "-d", "postgres", "-c", f"CREATE DATABASE {db_name};"])
 
 
 def init_db(db):
-    # Create extension
+    # Install necessary extensions
     db.perform("CREATE EXTENSION IF NOT EXISTS postgis;")
     db.perform("CREATE EXTENSION IF NOT EXISTS postgis_raster;")
     db.perform("CREATE EXTENSION IF NOT EXISTS hstore;")
@@ -23,11 +24,17 @@ def init_db(db):
     db.perform("CREATE EXTENSION IF NOT EXISTS btree_gist;")
     db.perform("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
 
-    # Create schema
+    # Create schemas
     db.perform("CREATE SCHEMA IF NOT EXISTS basic;")
     db.perform("CREATE SCHEMA IF NOT EXISTS temporal;")
 
-    # Create database functions
+    # Create data types
+    for file in os.listdir("src/db/data_types"):
+        if file.endswith(".sql"):
+            with open(f"src/db/data_types/{file}", "r") as f:
+                db.perform(f.read())
+
+    # Create functions
     for file in os.listdir("src/db/functions"):
         if file.endswith(".sql"):
             with open(f"src/db/functions/{file}", "r") as f:

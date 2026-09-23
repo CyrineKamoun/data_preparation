@@ -71,9 +71,13 @@ class POITable:
         elif table_type == "transport":
             table_name = f"{self.data_set_type}_{self.data_set_name}"
             category_columns = [
-                "stop_id text NULL",
-                "category text NULL",
-                "modes text[] NULL"
+                "stop_id text NOT NULL",
+                "category text NOT NULL",
+                "bus text NOT NULL",
+                "tram text NOT NULL",
+                "metro text NOT NULL",
+                "rail text NOT NULL",
+                "other text NOT NULL",
             ]
         else:
             raise ValueError("Invalid table_type. Supported values are 'standard', 'school', 'childcare', or 'transport.")
